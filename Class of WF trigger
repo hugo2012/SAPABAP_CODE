@@ -1,0 +1,744 @@
+class /RB4R/CL_MM_GMMC_WF_TRIGGER definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces BI_OBJECT .
+  interfaces BI_PERSISTENT .
+  interfaces IF_WORKFLOW .
+
+  events TRIGGER_WF
+    exporting
+      value(REQUEST_NUMBER) type /RB4R/MM_REQUESTNO
+      value(PLANT) type WERKS_D
+      value(REQUEST_TYPE) type /RB4R/MM_REQ_TYPE .
+
+  methods CONSTRUCTOR
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+      !IV_PLANT type WERKS_D
+      !IV_REQUEST_TYPE type /RB4R/MM_REQ_TYPE .
+  methods TRIGGER_START_WF .
+  class-methods SUBMIT
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+      !IV_PLANT type WERKS_D
+      !IV_REQUEST_TYPE type /RB4R/MM_REQ_TYPE
+      !IV_WORKITEMID type SWW_WIID .
+  class-methods APPROVE
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+      !IV_PLANT type WERKS_D
+      !IV_REQUEST_TYPE type /RB4R/MM_REQ_TYPE
+      !IV_WORKITEMID type SWW_WIID .
+  class-methods REJECT
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+      !IV_PLANT type WERKS_D
+      !IV_REQUEST_TYPE type /RB4R/MM_REQ_TYPE
+      !IV_WORKITEMID type SWW_WIID .
+  class-methods SENDBACK
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+      !IV_PLANT type WERKS_D
+      !IV_REQUEST_TYPE type /RB4R/MM_REQ_TYPE
+      !IV_WORKITEMID type SWW_WIID
+      !IV_SENDBACKUSER type XUBNAME .
+  class-methods FORWARD
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+      !IV_PLANT type WERKS_D
+      !IV_REQUEST_TYPE type /RB4R/MM_REQ_TYPE
+      !IV_WORKITEMID type SWW_WIID
+      !IV_FW_FROM_USER type XUBNAME
+      !IV_FW_TO_USER type XUBNAME .
+  class-methods CALLBACK
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+      !IV_PLANT type WERKS_D
+      !IV_REQUEST_TYPE type /RB4R/MM_REQ_TYPE
+      !IV_WORKITEMID type SWW_WIID .
+  class-methods GET_OPEN_DECISION_WORKITEM
+    importing
+      !IV_REQUEST_NUMBER type /RB4R/MM_REQUESTNO
+    exporting
+      !ET_WORKITEMS type TSWWWIHEAD .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+    DATA gs_obj TYPE sibflpor .
+    DATA gv_request_number TYPE /rb4r/mm_requestno .
+    DATA gv_plant TYPE werks_d .
+    DATA gv_request_type TYPE /rb4r/mm_req_type .
+ENDCLASS.
+
+
+
+CLASS /RB4R/CL_MM_GMMC_WF_TRIGGER IMPLEMENTATION.
+
+
+  METHOD bi_object~default_attribute_value.
+  ENDMETHOD.
+
+
+  METHOD bi_object~execute_default_method.
+  ENDMETHOD.
+
+
+  METHOD bi_object~release.
+  ENDMETHOD.
+
+
+  METHOD bi_persistent~find_by_lpor.
+    DATA: lv_request_number TYPE /rb4r/mm_requestno,
+          lv_plant          TYPE werks_d,
+          lv_request_type   TYPE /rb4r/mm_req_type.
+    lv_request_number = lpor(10).
+    lv_plant          = lpor+10(4).
+    lv_request_type   = lpor+14(1).
+
+    TRY.
+        CREATE OBJECT result TYPE /rb4r/cl_mm_gmmc_wf_trigger
+          EXPORTING
+            iv_request_number = lv_request_number      " GMMC Applicatiton Req Number
+            iv_plant          = lv_plant               " Plant
+            iv_request_type   = lv_request_type.       " Request Type
+      CATCH cx_bo_error.
+        EXIT.
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD bi_persistent~lpor.
+    result = me->gs_obj.
+  ENDMETHOD.
+
+
+  METHOD bi_persistent~refresh.
+  ENDMETHOD.
+
+
+  METHOD constructor.
+    "The INSTID is concatenated by request number, plant, request type
+    CONCATENATE iv_request_number iv_plant iv_request_type INTO gs_obj-instid.
+    gs_obj-catid  = cl_swf_evt_event=>mc_objcateg_cl. "value = 'CL'.
+    gs_obj-typeid = '/RB4R/CL_MM_GMMC_WF_TRIGGER'.
+
+    gv_request_number = iv_request_number.
+    gv_plant          = iv_plant.
+    gv_request_type   = iv_request_type.
+  ENDMETHOD.
+
+
+  METHOD trigger_start_wf.
+    DATA: lv_objtype          TYPE sibftypeid,
+          lv_objkey           TYPE sibfinstid,
+          lv_event            TYPE sibfevent,
+          lr_event_parameters TYPE REF TO if_swf_ifs_parameter_container,
+          lv_param_name       TYPE swfdname,
+          lv_id               TYPE char10.
+
+    lv_objtype = '/RB4R/CL_MM_GMMC_WF_TRIGGER'. " Your Class Name
+    lv_event   = 'TRIGGER_WF'.  " Event Name.
+
+*     Instantiate an empty event container
+    CALL METHOD cl_swf_evt_event=>get_event_container
+      EXPORTING
+        im_objcateg  = cl_swf_evt_event=>mc_objcateg_cl
+        im_objtype   = lv_objtype
+        im_event     = lv_event
+      RECEIVING
+        re_reference = lr_event_parameters.
+
+*     Set up the name/value pair to be added to the container
+    lv_param_name = 'PLANT'.  " parameter name of the event
+    lv_id         =  gv_plant.
+
+*     Add the name/value pair to the event conainer
+    TRY.
+        CALL METHOD lr_event_parameters->set
+          EXPORTING
+            name  = lv_param_name
+            value = lv_id.
+
+      CATCH cx_swf_cnt_cont_access_denied ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_access_denied ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_not_found ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_type_conflict ##NO_HANDLER.
+      CATCH cx_swf_cnt_unit_type_conflict ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_def_invalid ##NO_HANDLER.
+      CATCH cx_swf_cnt_container ##NO_HANDLER.
+    ENDTRY.
+
+*         Set up the name/value pair to be added to the container
+    lv_param_name = 'REQUEST_NUMBER'.  " parameter name of the event
+    lv_id         = gv_request_number.
+
+*         Add the name/value pair to the event conainer
+    TRY.
+        CALL METHOD lr_event_parameters->set
+          EXPORTING
+            name  = lv_param_name
+            value = lv_id.
+
+      CATCH cx_swf_cnt_cont_access_denied ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_access_denied ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_not_found ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_type_conflict ##NO_HANDLER.
+      CATCH cx_swf_cnt_unit_type_conflict ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_def_invalid ##NO_HANDLER.
+      CATCH cx_swf_cnt_container ##NO_HANDLER.
+    ENDTRY.
+
+*         Set up the name/value pair to be added to the container
+    lv_param_name = 'REQUEST_TYPE'.  " parameter name of the event
+    lv_id         = gv_request_type.
+
+*         Add the name/value pair to the event conainer
+    TRY.
+        CALL METHOD lr_event_parameters->set
+          EXPORTING
+            name  = lv_param_name
+            value = lv_id.
+
+      CATCH cx_swf_cnt_cont_access_denied ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_access_denied ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_not_found ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_type_conflict ##NO_HANDLER.
+      CATCH cx_swf_cnt_unit_type_conflict ##NO_HANDLER.
+      CATCH cx_swf_cnt_elem_def_invalid ##NO_HANDLER.
+      CATCH cx_swf_cnt_container ##NO_HANDLER.
+    ENDTRY.
+
+    TRY.
+* Option 1: Call directly
+*      CALL METHOD cl_swf_evt_event=>raise
+*        EXPORTING
+*          im_objcateg        = gs_obj-catid
+*          im_objtype         = gs_obj-typeid
+*          im_event           = lv_event
+*          im_objkey          = gs_obj-instid
+*          im_event_container = lr_event_parameters.
+
+* Option 2: Call by instance object
+        DATA lo_event_ref TYPE REF TO if_swf_evt_event.
+        CALL METHOD cl_swf_evt_event=>get_instance
+          EXPORTING
+            im_objcateg        = gs_obj-catid             " Workflow: Object Type BO, CL ...
+            im_objtype         = gs_obj-typeid            " Class
+            im_event           = lv_event                 " Event Name
+            im_objkey          = gs_obj-instid            " Object Key
+            im_event_container = lr_event_parameters      " Event Parameter
+          RECEIVING
+            re_event           = lo_event_ref.            " Event
+
+        CALL METHOD lo_event_ref->raise.
+
+        COMMIT WORK AND WAIT.
+      CATCH cx_swf_evt_invalid_objtype ##NO_HANDLER.
+      CATCH cx_swf_evt_invalid_event ##NO_HANDLER.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD approve.
+
+    DATA: lv_ret_code   LIKE sy-subrc,
+          lt_msg_lines  TYPE TABLE OF swr_messag,
+          lt_msg_struct TYPE TABLE OF swr_mstruc.
+
+    "The workitem send into this method is the workitem decision for that approver
+    DATA lt_alternatives TYPE STANDARD TABLE OF swr_decialts.
+    "Get decision code
+    CALL FUNCTION 'SAP_WAPI_DECISION_READ'
+      EXPORTING
+        workitem_id  = iv_workitemid
+        language     = 'E'  "Currently only support language EN
+      TABLES
+        alternatives = lt_alternatives.
+
+    "Get "Approve" decision code
+    READ TABLE lt_alternatives INTO DATA(ls_alternative) WITH KEY alttext = 'Approve'.
+    IF sy-subrc EQ 0.
+      get_open_decision_workitem(
+        EXPORTING
+          iv_request_number = iv_request_number                 " GMMC Applicatiton Req Number
+        IMPORTING
+          et_workitems      = DATA(lt_workitems)                 " Workflow: Table with Work Items
+      ).
+
+      READ TABLE lt_workitems INTO DATA(ls_workitem) WITH KEY wi_id = iv_workitemid.
+      IF sy-subrc EQ 0.
+        CALL FUNCTION 'SAP_WAPI_DECISION_COMPLETE'
+          EXPORTING
+            workitem_id    = ls_workitem-wi_id
+            language       = sy-langu
+            user           = sy-uname
+            decision_key   = ls_alternative-altkey  "Approve
+          IMPORTING
+            return_code    = lv_ret_code
+          TABLES
+            message_lines  = lt_msg_lines
+            message_struct = lt_msg_struct.
+        IF sy-subrc = 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = abap_true.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+*  "Find if the current user (included proxy user) is responsible to the open tasks
+*  LOOP AT lt_work_items INTO ls_work_items.
+*    lv_dialog_wi  = ls_work_items-wi_id.
+*
+*    CALL FUNCTION 'SAP_WAPI_WORKITEM_RECIPIENTS'
+*      EXPORTING
+*        workitem_id    = lv_dialog_wi
+*      IMPORTING
+*        return_code    = lv_retcode
+*      TABLES
+*        recipients     = lt_receipents
+*        message_lines  = lt_message_lines
+*        message_struct = lt_msg_str.
+*
+*    IF lv_retcode = 0 AND lt_receipents IS NOT INITIAL.
+*
+*      "Find the proxy user and include in lt_recepients_sort
+*
+*      "If current user is responsible for the task
+*      READ TABLE lt_receipents_sort TRANSPORTING NO FIELDS
+*                               WITH TABLE KEY otype = 'US'
+*                                              objid = sy-uname.
+*      IF sy-subrc EQ 0.
+*        ls_wrk_id  = ls_work_items-wi_id.
+*        EXIT.
+*      ENDIF.
+*
+*    ENDIF.
+*
+*  ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD callback.
+    DATA: lv_ret_code   LIKE sy-subrc,
+          lt_msg_lines  TYPE TABLE OF swr_messag,
+          lt_msg_struct TYPE TABLE OF swr_mstruc.
+
+    "The workitem send into this method is the workitem decision for that approver
+    DATA lt_alternatives TYPE STANDARD TABLE OF swr_decialts.
+
+    "Get workitem with status READY
+    get_open_decision_workitem(
+      EXPORTING
+        iv_request_number = iv_request_number                 " GMMC Applicatiton Req Number
+      IMPORTING
+        et_workitems      = DATA(lt_workitems)                 " Workflow: Table with Work Items
+    ).
+
+    "Randomly pick a current open decision task to call back by requestor
+    READ TABLE lt_workitems INTO DATA(ls_workitem) INDEX 1.
+    IF sy-subrc EQ 0.
+
+      "Get decision code
+      CALL FUNCTION 'SAP_WAPI_DECISION_READ'
+        EXPORTING
+          workitem_id  = ls_workitem-wi_id
+          language     = 'E'  "Currently only support language EN
+        TABLES
+          alternatives = lt_alternatives.
+
+      "Get "Call Back" decision code
+      READ TABLE lt_alternatives INTO DATA(ls_alternative) WITH KEY alttext = 'Call Back'.
+      IF sy-subrc EQ 0.
+
+        CALL FUNCTION 'SAP_WAPI_DECISION_COMPLETE'
+          EXPORTING
+            workitem_id    = ls_workitem-wi_id
+            language       = sy-langu
+            user           = sy-uname
+            decision_key   = ls_alternative-altkey  "Approve
+          IMPORTING
+            return_code    = lv_ret_code
+          TABLES
+            message_lines  = lt_msg_lines
+            message_struct = lt_msg_struct.
+        IF sy-subrc = 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = abap_true.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD reject.
+    DATA: lv_ret_code   LIKE sy-subrc,
+          lt_msg_lines  TYPE TABLE OF swr_messag,
+          lt_msg_struct TYPE TABLE OF swr_mstruc.
+
+    "The workitem send into this method is the workitem decision for that approver
+    DATA lt_alternatives TYPE STANDARD TABLE OF swr_decialts.
+    "Get decision code
+    CALL FUNCTION 'SAP_WAPI_DECISION_READ'
+      EXPORTING
+        workitem_id  = iv_workitemid
+        language     = 'E'  "Currently only support language EN
+      TABLES
+        alternatives = lt_alternatives.
+
+    "Get "Approve" decision code
+    READ TABLE lt_alternatives INTO DATA(ls_alternative) WITH KEY alttext = 'Reject'.
+    IF sy-subrc EQ 0.
+      get_open_decision_workitem(
+        EXPORTING
+          iv_request_number = iv_request_number                 " GMMC Applicatiton Req Number
+        IMPORTING
+          et_workitems      = DATA(lt_workitems)                 " Workflow: Table with Work Items
+      ).
+
+      READ TABLE lt_workitems INTO DATA(ls_workitem) WITH KEY wi_id = iv_workitemid.
+      IF sy-subrc EQ 0.
+        CALL FUNCTION 'SAP_WAPI_DECISION_COMPLETE'
+          EXPORTING
+            workitem_id    = ls_workitem-wi_id
+            language       = sy-langu
+            user           = sy-uname
+            decision_key   = ls_alternative-altkey  "Approve
+          IMPORTING
+            return_code    = lv_ret_code
+          TABLES
+            message_lines  = lt_msg_lines
+            message_struct = lt_msg_struct.
+        IF sy-subrc = 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = abap_true.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD forward.
+    "Forward will have addition step, need to write the fw user into workflow container
+    DATA:
+      lv_ret_code   LIKE sy-subrc,
+      lt_msglines   TYPE STANDARD TABLE OF swr_messag,
+      lt_msgstr     TYPE STANDARD TABLE OF swr_mstruc,
+      lt_msg_lines  TYPE TABLE OF swr_messag,
+      lt_msg_struct TYPE TABLE OF swr_mstruc.
+
+    DATA:
+      lt_purchaser_cont TYPE TABLE OF swr_cont,
+      lt_cont_add       TYPE TABLE OF swr_cont,
+      ls_cont_add       LIKE LINE OF  lt_cont_add.  "Update container
+
+    "The workitem send into this method is the workitem decision for that approver
+    DATA lt_alternatives TYPE STANDARD TABLE OF swr_decialts.
+    "Get decision code
+    CALL FUNCTION 'SAP_WAPI_DECISION_READ'
+      EXPORTING
+        workitem_id  = iv_workitemid
+        language     = 'E'  "Currently only support language EN
+      TABLES
+        alternatives = lt_alternatives.
+
+    "Get parent work item of the decision task
+    SELECT SINGLE parent_wi
+    FROM swwwihead
+    INTO @DATA(lv_parent_wi)
+    WHERE wi_id = @iv_workitemid.
+
+    IF sy-subrc EQ 0.
+      "Get container of decision
+      CALL FUNCTION 'SAP_WAPI_READ_CONTAINER'
+        EXPORTING
+          workitem_id      = lv_parent_wi
+        IMPORTING
+          return_code      = lv_ret_code
+        TABLES
+          simple_container = lt_purchaser_cont.
+      SORT lt_purchaser_cont.
+
+      "Read container if LC_FW_FROM_PUR container having value or not
+      "If not exist -> save this user as 1st forwarder
+      "If exist -> this already forwarded by 2nd, 3rd, 4th.. approver. don't need to write this
+      "The FW from user will be used in case 2nd pur reject back to 1st original purchaser
+      READ TABLE lt_purchaser_cont INTO DATA(ls_container) WITH KEY element = 'LC_FW_FROM_PUR'.
+      IF sy-subrc EQ 0.
+        IF ls_container-value IS INITIAL.
+          "Assign current user as 1st purchaser
+          ls_cont_add-element    = 'LC_FW_FROM_PUR'.
+*          ls_cont_add-value      = |US{ sy-uname }|.
+          ls_cont_add-value      = |US{ iv_fw_from_user }|.
+          APPEND ls_cont_add TO lt_cont_add.
+          CLEAR  ls_cont_add.
+
+          " setting the value container element.
+          CALL FUNCTION 'SAP_WAPI_WRITE_CONTAINER'
+            EXPORTING
+              workitem_id      = lv_parent_wi
+            IMPORTING
+              return_code      = lv_ret_code
+            TABLES
+              simple_container = lt_cont_add
+              message_lines    = lt_msglines
+              message_struct   = lt_msgstr.
+        ELSE.
+          "Do nothing
+        ENDIF.
+      ENDIF.
+
+      "Assign fw to user in workflow container
+      ls_cont_add-element    = 'LC_FW_TO_PUR'.
+      ls_cont_add-value      = |US{ iv_fw_to_user }|.
+      APPEND ls_cont_add TO lt_cont_add.
+      CLEAR  ls_cont_add.
+
+      " setting the value container element.
+      CALL FUNCTION 'SAP_WAPI_WRITE_CONTAINER'
+        EXPORTING
+          workitem_id      = lv_parent_wi
+        IMPORTING
+          return_code      = lv_ret_code
+        TABLES
+          simple_container = lt_cont_add
+          message_lines    = lt_msglines
+          message_struct   = lt_msgstr.
+
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = abap_true.
+
+
+      "Get "Forward" decision code
+      READ TABLE lt_alternatives INTO DATA(ls_alternative) WITH KEY alttext = 'Forward'.
+      IF sy-subrc EQ 0.
+        get_open_decision_workitem(
+          EXPORTING
+            iv_request_number = iv_request_number                 " GMMC Applicatiton Req Number
+          IMPORTING
+            et_workitems      = DATA(lt_workitems)                 " Workflow: Table with Work Items
+        ).
+
+        READ TABLE lt_workitems INTO DATA(ls_workitem) WITH KEY wi_id = iv_workitemid.
+        IF sy-subrc EQ 0.
+          CALL FUNCTION 'SAP_WAPI_DECISION_COMPLETE'
+            EXPORTING
+              workitem_id    = ls_workitem-wi_id
+              language       = sy-langu
+              user           = sy-uname
+              decision_key   = ls_alternative-altkey  "Approve
+            IMPORTING
+              return_code    = lv_ret_code
+            TABLES
+              message_lines  = lt_msg_lines
+              message_struct = lt_msg_struct.
+          IF sy-subrc = 0.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+          ELSE.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD sendback.
+    DATA:
+      lv_ret_code   LIKE sy-subrc,
+      lt_msglines   TYPE STANDARD TABLE OF swr_messag,
+      lt_msgstr     TYPE STANDARD TABLE OF swr_mstruc,
+      lt_msg_lines  TYPE TABLE OF swr_messag,
+      lt_msg_struct TYPE TABLE OF swr_mstruc.
+
+    DATA:
+      lt_datafab_cont TYPE TABLE OF swr_cont,
+      lt_cont_add     TYPE TABLE OF swr_cont,
+      ls_cont_add     LIKE LINE OF  lt_cont_add.  "Update container
+
+    "The workitem send into this method is the workitem decision for that approver
+    DATA lt_alternatives TYPE STANDARD TABLE OF swr_decialts.
+    "Get decision code
+    CALL FUNCTION 'SAP_WAPI_DECISION_READ'
+      EXPORTING
+        workitem_id  = iv_workitemid
+        language     = 'E'  "Currently only support language EN
+      TABLES
+        alternatives = lt_alternatives.
+
+    "Get parent work item of the decision task
+    SELECT SINGLE parent_wi
+    FROM swwwihead
+    INTO @DATA(lv_parent_wi)
+    WHERE wi_id = @iv_workitemid.
+
+    IF sy-subrc EQ 0.
+      "Get container of decision
+      CALL FUNCTION 'SAP_WAPI_READ_CONTAINER'
+        EXPORTING
+          workitem_id      = lv_parent_wi
+        IMPORTING
+          return_code      = lv_ret_code
+        TABLES
+          simple_container = lt_datafab_cont.
+      SORT lt_datafab_cont.
+
+      "Read container WF_T_SNDBCK_PUR_AGNT and assign the send
+      READ TABLE lt_datafab_cont INTO DATA(ls_container) WITH KEY element = 'LC_SNDBCK_PUR_AGNT'.
+      IF sy-subrc EQ 0.
+        "Assign current user as 1st purchaser
+        ls_cont_add-element    = 'LC_SNDBCK_PUR_AGNT'.
+        ls_cont_add-value      = |US{ iv_sendbackuser }|.
+        APPEND ls_cont_add TO lt_cont_add.
+        CLEAR  ls_cont_add.
+
+        " setting the value container element.
+        CALL FUNCTION 'SAP_WAPI_WRITE_CONTAINER'
+          EXPORTING
+            workitem_id      = lv_parent_wi
+          IMPORTING
+            return_code      = lv_ret_code
+          TABLES
+            simple_container = lt_cont_add
+            message_lines    = lt_msglines
+            message_struct   = lt_msgstr.
+      ENDIF.
+
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = abap_true.
+
+      "Get "Send Back" decision code
+      READ TABLE lt_alternatives INTO DATA(ls_alternative) WITH KEY alttext = 'Send Back'.
+      IF sy-subrc EQ 0.
+        get_open_decision_workitem(
+          EXPORTING
+            iv_request_number = iv_request_number                 " GMMC Applicatiton Req Number
+          IMPORTING
+            et_workitems      = DATA(lt_workitems)                 " Workflow: Table with Work Items
+        ).
+
+        READ TABLE lt_workitems INTO DATA(ls_workitem) WITH KEY wi_id = iv_workitemid.
+        IF sy-subrc EQ 0.
+          CALL FUNCTION 'SAP_WAPI_DECISION_COMPLETE'
+            EXPORTING
+              workitem_id    = ls_workitem-wi_id
+              language       = sy-langu
+              user           = sy-uname
+              decision_key   = ls_alternative-altkey  "Approve
+            IMPORTING
+              return_code    = lv_ret_code
+            TABLES
+              message_lines  = lt_msg_lines
+              message_struct = lt_msg_struct.
+          IF sy-subrc = 0.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+          ELSE.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+          ENDIF.
+        ENDIF.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD submit.
+* Submit request => trigger start workflow and create new workitem ID
+    DATA lo_gmmc_wf TYPE REF TO /rb4r/cl_mm_gmmc_wf_trigger.
+
+    DATA: lv_ret_code   LIKE sy-subrc,
+          lt_msg_lines  TYPE TABLE OF swr_messag,
+          lt_msg_struct TYPE TABLE OF swr_mstruc.
+
+    IF iv_workitemid IS INITIAL.
+      "Create instance workflow trigger
+      CREATE OBJECT lo_gmmc_wf
+        EXPORTING
+          iv_request_number = iv_request_number       " GMMC Applicatiton Req Number
+          iv_plant          = iv_plant                " Plant
+          iv_request_type   = iv_request_type.         " Request Type
+
+      "Trigger create workflow
+      CALL METHOD lo_gmmc_wf->trigger_start_wf.
+    ELSE.
+      "Requestor resubmit
+      get_open_decision_workitem(
+        EXPORTING
+          iv_request_number = iv_request_number                 " GMMC Applicatiton Req Number
+        IMPORTING
+          et_workitems      = DATA(lt_workitems)                 " Workflow: Table with Work Items
+      ).
+
+      READ TABLE lt_workitems INTO DATA(ls_workitem) INDEX 1.
+      IF sy-subrc EQ 0.
+        CALL FUNCTION 'SAP_WAPI_DECISION_COMPLETE'
+          EXPORTING
+            workitem_id    = ls_workitem-wi_id
+            language       = sy-langu
+            user           = sy-uname
+            decision_key   = '0001' "Submit Request
+          IMPORTING
+            return_code    = lv_ret_code
+          TABLES
+            message_lines  = lt_msg_lines
+            message_struct = lt_msg_struct.
+        IF sy-subrc = 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = abap_true.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_open_decision_workitem.
+    "From request number, get workitem id
+    SELECT SINGLE workitemid
+      FROM /rb4r/mm_request
+      INTO @DATA(lv_parent_wi)
+      WHERE requestno = @iv_request_number.
+    IF sy-subrc EQ 0.
+      CALL FUNCTION 'SWI_GET_RELATED_WORKITEMS'
+        EXPORTING
+          wi_id       = lv_parent_wi
+        TABLES
+          related_wis = et_workitems.
+
+      " Remove all steps is not dialog (Type 'W')
+      DELETE et_workitems WHERE wi_type NE 'W'.
+      DELETE et_workitems WHERE wi_stat NE 'READY'.
+      DELETE et_workitems WHERE wi_rh_task EQ 'TS99900056'. "Reminder task
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
