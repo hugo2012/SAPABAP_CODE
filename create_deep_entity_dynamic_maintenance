@@ -1,0 +1,426 @@
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_deep_entity.
+* Local types declarations
+    TYPES: lty_r_shipto     TYPE RANGE OF kunnr,
+           lty_r_ship_point TYPE RANGE OF vstel,
+           lty_r_country    TYPE RANGE OF land1z,
+           lty_r_output     TYPE RANGE OF ppfdtt,
+           lty_r_csp        TYPE RANGE OF /rb4r/sd_csp_d.
+
+    TYPES: BEGIN OF lty_varkey,
+             varkey TYPE vim_enqkey,
+           END OF lty_varkey.
+
+* Local constants declarations
+    CONSTANTS: lc_msgid TYPE symsgid VALUE '/RB1M/TM_OUTPUT_MSGS'.
+
+* Local variables, work areas and internal table declarations
+    DATA: ls_return               TYPE /rb1m/cl_tm_output_mai_mpc_ext=>ts_deep_entity,
+          lt_filter               TYPE STANDARD TABLE OF /rb4r/plm_tabflt,
+          lv_index                TYPE char2,
+          lt_items                TYPE STANDARD TABLE OF /rb1m/tm_dynamic_items,
+          ls_items                TYPE /rb1m/tm_dynamic_items,
+          lv_col_name             TYPE fieldname,
+          lv_mandt                TYPE fieldname VALUE 'MANDT',
+          lv_varkey               TYPE vim_enqkey,
+          ls_varkey               TYPE lty_varkey,
+          lt_varkey               TYPE STANDARD TABLE OF lty_varkey,
+          lv_message              TYPE bapi_msg,
+          lv_table                TYPE string,
+          lv_tabname              TYPE tabname,
+          lv_where_clause         TYPE string,
+          lt_range1               TYPE RANGE OF char255,
+          lt_range2               TYPE RANGE OF char255,
+          lt_range3               TYPE RANGE OF char255,
+          lt_range4               TYPE RANGE OF char255,
+          lt_range5               TYPE RANGE OF char255,
+          lt_dyn_prg_whitlist_tab TYPE string_hashed_table,
+          lr_data                 TYPE REF TO data,
+          lv_no_of_copies         TYPE char2.
+
+* local field symbols declarations
+    FIELD-SYMBOLS: <lfs_table>      TYPE STANDARD TABLE,
+                   <lfs_table_line> TYPE any.
+
+    CASE iv_entity_set_name.
+      WHEN 'DynTabSet'.
+        TRY.
+            "Get deep entity data from service
+            io_data_provider->read_entry_data( IMPORTING es_data = ls_return ).
+            IF ls_return IS NOT INITIAL.
+
+              "Create reference for Data provider class
+              DATA(lo_data_prov) = NEW /rb1m/cl_tm_output_data_provid( ).
+
+              "Get description of the Access Sequence table
+              SELECT SINGLE table_description FROM /rb1m/tm_acc_map
+                                              INTO @DATA(lv_title)
+                                              WHERE output_type EQ @ls_return-output_type AND
+                                                    Table_name  EQ @ls_return-table_name.
+              IF sy-subrc EQ 0.
+                ls_return-title = lv_title.
+              ENDIF.
+              " Get filter data for where clause from service
+              CALL METHOD lo_data_prov->get_filters_from_service
+                EXPORTING
+                  is_service    = ls_return
+                IMPORTING
+                  er_ship_point = DATA(lr_ship_point)
+                  er_ship_to    = DATA(lr_ship_to)
+                  er_csp        = DATA(lr_csp)
+                  er_country    = DATA(lr_country)
+                  er_output     = DATA(lr_output).
+*
+              "Get Dynamic table header
+              CALL METHOD lo_data_prov->get_header_data
+                EXPORTING
+                  is_dynamic_entity = ls_return
+                IMPORTING
+                  et_fields_list    = DATA(lt_fieldlist)
+                  et_header_data    = DATA(lt_header).
+
+              TRY.
+                  lv_table = ls_return-Table_name.
+                  lv_table = cl_abap_dyn_prg=>check_table_name_str( val = to_upper( lv_table )
+                                                                    packages = '/RB1M/TM_TRANSPORT_ORDER_DDIC' ).
+                CATCH cx_abap_not_a_table cx_abap_not_in_package.
+                  "Raise Error Message
+                  DATA(lo_message_container) = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+                  CALL METHOD lo_message_container->add_message
+                    EXPORTING
+                      iv_msg_type               = /iwbep/cl_cos_logger=>error
+                      iv_msg_id                 = lc_msgid
+                      iv_msg_number             = '013'
+                      iv_msg_text               = lv_message
+                      iv_add_to_response_header = abap_true. "add the message to the header
+              ENDTRY.
+
+              "Define Dynamic Table and Work Area based on table name received
+              CREATE DATA lr_data TYPE STANDARD TABLE OF (lv_table).
+              ASSIGN lr_data->* TO <lfs_table>.
+
+              CREATE DATA lr_data LIKE LINE OF <lfs_table>.
+              ASSIGN lr_data->* TO <lfs_table_line>.
+
+              IF ls_return-mode EQ 'R' OR " When user Clicks on 'GO' button in Fiori App
+                 ls_return-mode EQ 'H'.   " When user selected Access Sequence in Fiori App
+
+                "Fill Header data to Deep entity
+                ls_return-headernav = lt_header.
+
+                IF ls_return-mode EQ 'R'.
+                  " Prepare Filter data for Where Clause
+                  CALL METHOD lo_data_prov->get_filter_for_where_clause
+                    EXPORTING
+                      iv_table_name = lv_table
+                      ir_output     = lr_output
+                      ir_csp        = lr_csp
+                      ir_ship_point = lr_ship_point
+                      ir_ship_to    = lr_ship_to
+                      ir_country    = lr_country
+                    IMPORTING
+                      et_filter     = lt_filter.
+
+                  " Get where clause for dynamic internal table using filter
+                  /rb4r/cl_plm_mbom_util_service=>generate_where_clause_by_flt( EXPORTING
+                                                                                  it_filter        = lt_filter
+                                                                                  iv_rangetab_name = 'LT_RANGE'
+                                                                                IMPORTING
+                                                                                  et_range1        = lt_range1
+                                                                                  et_range2        = lt_range2
+                                                                                  et_range3        = lt_range3
+                                                                                  et_range4        = lt_range4
+                                                                                  et_range5        = lt_range5
+                                                                                CHANGING
+                                                                                  cv_where_clause  = lv_where_clause ).
+                  INSERT condense( lv_where_clause ) INTO TABLE lt_dyn_prg_whitlist_tab.
+                  TRY." ATC....
+                      lv_where_clause = cl_abap_dyn_prg=>check_whitelist_tab( val        = lv_where_clause
+                                                                              whitelist  = lt_dyn_prg_whitlist_tab ).
+                    CATCH cx_abap_not_in_whitelist.
+                      "Raise Error Message
+                      lo_message_container = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+                      CALL METHOD lo_message_container->add_message
+                        EXPORTING
+                          iv_msg_type               = /iwbep/cl_cos_logger=>error
+                          iv_msg_id                 = lc_msgid
+                          iv_msg_number             = '014'
+                          iv_msg_text               = lv_message
+                          iv_add_to_response_header = abap_true. "add the message to the header
+                  ENDTRY.
+
+                  "Dynamic select query to fetch data from dynamic table
+                  SELECT DISTINCT * FROM (lv_table)
+                                    INTO CORRESPONDING FIELDS OF TABLE <lfs_table>
+                                    WHERE (lv_where_clause). "#EC CI_DYNTAB. #EC CI_DYNWHERE.
+                  IF sy-subrc EQ 0.
+                    ls_items-output_type = ls_return-output_type.
+                    ls_items-Table_name  = lv_table.
+                    ls_items-title       = lv_title.
+                    LOOP AT <lfs_table> ASSIGNING <lfs_table_line>.
+                      DATA(lv_count) = sy-tabix.
+                      LOOP AT lt_fieldlist INTO DATA(ls_fieldlist)."#EC CI_NESTED
+                        lv_index = sy-tabix.
+                        ASSIGN COMPONENT ls_fieldlist-FIeldname OF STRUCTURE <lfs_table_line> TO FIELD-SYMBOL(<lfs_col_data>).
+                        IF <lfs_col_data> IS ASSIGNED.
+                          CONCATENATE 'COL' lv_index INTO lv_col_name.
+                          CONDENSE lv_col_name.
+                          ls_items-(lv_col_name) = <lfs_col_data>.
+                          IF  ls_fieldlist-FIeldname = 'NO_OF_COPIES'.
+                            lv_no_of_copies = <lfs_col_data>.
+                            CONDENSE lv_no_of_copies NO-GAPS.
+                            ls_items-(lv_col_name) = lv_no_of_copies.
+                          ENDIF.
+
+                        ENDIF.
+                        CLEAR: ls_fieldlist, lv_index, lv_col_name,lv_no_of_copies.
+                      ENDLOOP.
+                      ls_items-items_index = lv_count.
+                      APPEND ls_items TO lt_items.
+                    ENDLOOP.
+                    ls_return-itemsnav = lt_items.
+                  ELSE.
+                    "Raise Error Message
+                    lo_message_container = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+                    MESSAGE e001(/rb1m/tm_output_msgs) INTO lv_message WITH lv_table.
+                    CALL METHOD lo_message_container->add_message
+                      EXPORTING
+                        iv_msg_type               = /iwbep/cl_cos_logger=>error
+                        iv_msg_id                 = lc_msgid
+                        iv_msg_number             = '001'
+                        iv_msg_text               = lv_message
+                        iv_add_to_response_header = abap_true. "add the message to the header
+                  ENDIF.
+                ENDIF.
+
+              ELSE. " When user clicks on SAVE/DELETE button in fiori App
+
+                lt_items  = ls_return-itemsnav.
+                lt_header = ls_return-headernav.
+                IF lt_items IS NOT INITIAL.
+                  LOOP AT lt_items ASSIGNING FIELD-SYMBOL(<lfs_items>).
+                    lv_index = 1.
+                    lv_varkey = |{ sy-mandt }|.
+                    LOOP AT lt_fieldlist INTO ls_fieldlist WHERE FIeldname NE 'MANDT'."#EC CI_NESTED
+                      CONCATENATE 'COL' lv_index INTO lv_col_name.
+                      CONDENSE lv_col_name.
+                      <lfs_table_line>-(ls_fieldlist-FIeldname) = <lfs_items>-(lv_col_name).
+                      IF ls_fieldlist-FIeldname EQ 'SHIPPING_POINT'.
+                        TRANSLATE <lfs_table_line>-(ls_fieldlist-fieldname) TO UPPER CASE.
+                      ENDIF.
+                      lv_index = lv_index + 1.
+                      IF ls_fieldlist-FIeldname EQ 'CREATEDDATE' AND ls_return-mode EQ 'I'.
+                        <lfs_table_line>-(ls_fieldlist-FIeldname) = sy-datum.
+                      ELSEIF ls_fieldlist-FIeldname EQ 'CREATEDUSER' AND ls_return-mode EQ 'I'.
+                        <lfs_table_line>-(ls_fieldlist-FIeldname) = sy-uname.
+                      ELSEIF ls_fieldlist-FIeldname EQ 'LASTCHANGEDATE' AND ls_return-mode EQ 'U'.
+                        <lfs_table_line>-(ls_fieldlist-FIeldname) = sy-datum.
+                      ELSEIF ls_fieldlist-FIeldname EQ 'LASTCHANGEUSER' AND ls_return-mode EQ 'U'.
+                        <lfs_table_line>-(ls_fieldlist-FIeldname) = sy-uname.
+                      ENDIF.
+
+                      IF ls_fieldlist-keyflag EQ abap_true AND ls_return-mode NE 'I'.
+                        lv_varkey = |{ lv_varkey } { <lfs_items>-(lv_col_name) }|.
+                      ENDIF.
+                    ENDLOOP.
+                    ls_varkey-varkey = lv_varkey.
+                    APPEND ls_varkey TO lt_varkey.
+                    CLEAR: ls_varkey, lv_varkey.
+                    <lfs_table_line>-(lv_mandt) = sy-mandt.
+                    APPEND <lfs_table_line> TO <lfs_table>.
+                  ENDLOOP.
+* Validate received data in case of Update or create mode
+                  CALL METHOD lo_data_prov->validate_received_data
+                    EXPORTING
+                      it_items   = <lfs_table>
+                      iv_mode    = ls_return-mode
+                      iv_tabname = ls_return-table_name
+                    IMPORTING
+                      ev_msgno   = sy-msgno
+                      ev_msgid   = sy-msgid
+                      ev_msgty   = sy-msgty
+                      ev_msgv1   = sy-msgv1
+                      ev_msgv2   = sy-msgv2
+                      ev_msgv3   = sy-msgv3
+                      ev_msgv4   = sy-msgv4
+                      ev_failure = DATA(lv_failure).
+                  IF lv_failure IS NOT INITIAL.
+                    "Raise Error Message
+                    lo_message_container = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+                    CALL METHOD lo_message_container->add_message
+                      EXPORTING
+                        iv_msg_type               = /iwbep/cl_cos_logger=>error
+                        iv_msg_id                 = sy-msgid
+                        iv_msg_number             = sy-msgno
+                        iv_msg_v1                 = sy-msgv1
+                        iv_msg_v2                 = sy-msgv2
+                        iv_msg_v3                 = sy-msgv3
+                        iv_msg_v4                 = sy-msgv4
+                        iv_add_to_response_header = abap_true. "add the message to the header
+                  ELSE.
+                    "Prepare key based on OutputType to lock entries
+                    IF ls_return-mode EQ 'I'.
+                      REFRESH: lt_varkey.
+                      lv_varkey = |{ sy-mandt } { ls_return-output_Type }|.
+                      ls_varkey-varkey = lv_varkey.
+                      APPEND ls_varkey TO lt_varkey.
+                      CLEAR: lv_varkey, ls_varkey.
+                    ENDIF.
+
+                    lv_tabname = lv_table.
+                    LOOP AT lt_varkey INTO ls_varkey.
+                      CALL FUNCTION 'ENQUEUE_E_TABLE'
+                        EXPORTING
+                          mode_rstable   = 'E'
+                          tabname        = lv_tabname
+                          varkey         = ls_varkey-varkey
+                        EXCEPTIONS
+                          foreign_lock   = 1
+                          system_failure = 2
+                          OTHERS         = 3.
+                      IF sy-subrc NE 0.
+                        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                        WITH sy-msgv1 lv_table sy-msgv3 sy-msgv4 INTO lv_message.
+                        "Raise Error Message
+                        lo_message_container = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+                        CALL METHOD lo_message_container->add_message
+                          EXPORTING
+                            iv_msg_type               = /iwbep/cl_cos_logger=>error
+                            iv_msg_id                 = sy-msgid
+                            iv_msg_number             = sy-msgno
+                            iv_msg_text               = lv_message
+                            iv_add_to_response_header = abap_true. "add the message to the header
+                        DATA(lv_lock) = abap_true.
+                        EXIT.
+                      ENDIF.
+                    ENDLOOP.
+
+                    IF lv_lock IS INITIAL.
+                      TRY.
+                          IF ls_return-mode EQ 'D'.
+                            DELETE (lv_table) FROM  TABLE <lfs_table>."#EC CI_DYNTAB
+                          ELSEIF ls_return-mode EQ 'I'.
+                            INSERT (lv_table) FROM  TABLE <lfs_table>."#EC CI_DYNTAB
+                          ELSEIF ls_return-mode EQ 'U'.
+                            MODIFY (lv_table) FROM  TABLE <lfs_table>."#EC CI_DYNTAB
+                          ENDIF.
+                          IF sy-subrc EQ 0.
+                            IF ls_return-mode EQ 'D'.
+                              REFRESH: ls_return-itemsnav.
+                            ENDIF.
+                            LOOP AT lt_varkey INTO ls_varkey.
+                              CALL FUNCTION 'DEQUEUE_E_TABLE'
+                                EXPORTING
+                                  mode_rstable = 'E'
+                                  tabname      = lv_tabname
+                                  varkey       = ls_varkey-varkey.
+                              CLEAR: ls_varkey.
+                            ENDLOOP.
+                          ENDIF.
+                        CATCH cx_sy_open_sql_db.
+                          "Raise Error Message
+                          lo_message_container = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+                          IF ls_return-mode EQ 'D'.
+                            MESSAGE e012(/rb1m/tm_output_msgs) INTO lv_message WITH lv_table."##MG_MISSING
+                          ELSEIF ls_return-mode EQ 'I'.
+                            MESSAGE e000(/rb1m/tm_output_msgs) INTO lv_message WITH lv_table."##MG_MISSING
+                          ELSEIF ls_return-mode EQ 'U'.
+                            MESSAGE e011(/rb1m/tm_output_msgs) INTO lv_message WITH lv_table."##MG_MISSING
+                          ENDIF.
+
+                          CALL METHOD lo_message_container->add_message
+                            EXPORTING
+                              iv_msg_type               = /iwbep/cl_cos_logger=>error
+                              iv_msg_id                 = lc_msgid
+                              iv_msg_number             = '001'
+                              iv_msg_text               = lv_message
+                              iv_add_to_response_header = abap_true. "add the message to the header
+                      ENDTRY.
+                    ENDIF.
+                  ENDIF.
+*                ENDIF.
+                ELSE.
+                  "Raise Error Message
+                  lo_message_container = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+                  CALL METHOD lo_message_container->add_message
+                    EXPORTING
+                      iv_msg_type               = /iwbep/cl_cos_logger=>error
+                      iv_msg_id                 = lc_msgid
+                      iv_msg_number             = '004'
+                      iv_msg_text               = lv_message
+                      iv_add_to_response_header = abap_true. "add the message to the header
+                ENDIF.
+              ENDIF.
+            ELSE. " If return table is initial
+              "Raise Error Message
+              lo_message_container = me->/iwbep/if_mgw_conv_srv_runtime~get_message_container( ).
+              CALL METHOD lo_message_container->add_message
+                EXPORTING
+                  iv_msg_type               = /iwbep/cl_cos_logger=>error
+                  iv_msg_id                 = lc_msgid
+                  iv_msg_number             = '003'
+                  iv_msg_text               = lv_message
+                  iv_add_to_response_header = abap_true. "add the message to the header
+            ENDIF.
+* For converting the data in the deep structure to the output format
+            CALL METHOD copy_data_to_ref
+              EXPORTING
+                is_data = ls_return
+              CHANGING
+                cr_data = er_deep_entity.
+          CATCH /iwbep/cx_mgw_busi_exception.
+          CATCH /iwbep/cx_mgw_tech_exception.
+          CATCH cx_root."#EC EMPTY_OK
+        ENDTRY.
+    ENDCASE.
+
+
+
+
+
+
+*              "Get Filters from service
+*              lr_ship_point = CORRESPONDING #( ls_return-shippointsonav[] ).
+*              lr_shipto     = CORRESPONDING #( ls_return-Shiptosonav[] ).
+*              lr_csp        = CORRESPONDING #( ls_return-cspsonav[] ).
+*              lr_country    = CORRESPONDING #( ls_return-countrysonav[] ).
+*
+*              IF lr_csp IS NOT INITIAL.
+*                LOOP AT lr_csp ASSIGNING FIELD-SYMBOL(<lfs_csp>).
+*                  IF <lfs_csp>-low IS NOT INITIAL.
+*                    TRANSLATE <lfs_csp>-low TO UPPER CASE.
+*                  ENDIF.
+*                  IF <lfs_csp>-high IS NOT INITIAL.
+*                    TRANSLATE <lfs_csp>-high TO UPPER CASE.
+*                  ENDIF.
+*                ENDLOOP.
+*              ENDIF.
+*
+*              IF lr_ship_point IS NOT INITIAL.
+*                LOOP AT lr_ship_point ASSIGNING FIELD-SYMBOL(<lfs_ship_point>).
+*                  IF <lfs_ship_point>-low IS NOT INITIAL.
+*                    TRANSLATE <lfs_ship_point>-low TO UPPER CASE.
+*                  ENDIF.
+*                  IF <lfs_ship_point>-high IS NOT INITIAL.
+*                    TRANSLATE <lfs_ship_point>-high TO UPPER CASE.
+*                  ENDIF.
+*                ENDLOOP.
+*              ENDIF.
+*
+*              IF lr_country IS NOT INITIAL.
+*                LOOP AT lr_country ASSIGNING FIELD-SYMBOL(<lfs_country>).
+*                  IF <lfs_country>-low IS NOT INITIAL.
+*                    TRANSLATE <lfs_country>-low TO UPPER CASE.
+*                  ENDIF.
+*                  IF <lfs_country>-high IS NOT INITIAL.
+*                    TRANSLATE <lfs_country>-high TO UPPER CASE.
+*                  ENDIF.
+*                ENDLOOP.
+*              ENDIF.
+*
+*              IF ls_return-output_type IS NOT INITIAL.
+*                lr_output = VALUE lty_r_output( BASE lr_output ( sign   = 'I'
+*                                                                 option = 'EQ'
+*                                                                 low    = ls_return-output_type ) ).
+*              ENDIF.
+
+  ENDMETHOD.
