@@ -1,0 +1,43 @@
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Request Header'
+
+@Metadata.ignorePropagatedAnnotations: true
+@ObjectModel.usageType:{
+    serviceQuality: #X,
+    sizeCategory: #S,
+    dataClass: #MIXED
+}
+
+define root view entity /RB4R/MM_I_GMMC_RequestHeader
+  as select from /rb4r/mm_request as RequestHeader --Header data for request
+  composition [0..*] of /RB4R/MM_I_GMMC_RequestItem as _RequestItem 
+  composition [0..*] of /RB4R/MM_I_GMMC_COMMENT     as _Comment
+  association [0..1] to I_User                      as _CreatedByUser on $projection.CreatedBy = _CreatedByUser.UserID
+{
+
+  key   requestno             as RequestNumber,
+        systemid              as SystemID,
+        plant                 as Plant,
+        @Semantics.user.createdBy: true
+        createdby             as CreatedBy,
+        createddate           as CreatedOn,
+        status                as Status,
+        workitemid            as WorkItemID,
+        description           as Description,
+        req_type              as RequestType,
+        action                as Action,
+        product_type          as ProductType,
+        @Semantics.largeObject: { mimeType: 'MimeType',  fileName: 'FileName' , contentDispositionPreference: #INLINE }
+        attachment            as Attachment,
+        @Semantics.mimeType: true
+        mimetype              as MimeType,
+        filename              as FileName,
+        local_last_changed_at as LastChangedAt,
+        local_last_changed_on as LastChangedOn,
+        
+        /* Associations */
+        _RequestItem,
+        _Comment,
+        _CreatedByUser
+}
