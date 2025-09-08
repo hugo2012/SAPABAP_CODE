@@ -1,0 +1,125 @@
+  METHOD /rb1m/if_sd_printout_util~process_ship_delv_pdf.
+
+    DATA: ls_pdf_file    TYPE fpformoutput,
+          lt_output_type TYPE /rb1m/cl_sd_printout_d_mpc=>tt_output,
+          ls_output_type TYPE /rb1m/sd_i_output,
+          ls_ppf_act TYPE /BOFU/S_PPF_ACT.
+    DATA lo_sd_printout_static TYPE REF TO /rb1m/cl_sd_printout_static.
+
+    TRY.
+
+        lt_output_type = CORRESPONDING #( it_output_type ).
+        SORT lt_output_type ASCENDING BY codocument document application messagetype actiontype.
+        DELETE ADJACENT DUPLICATES FROM lt_output_type COMPARING codocument document application messagetype actiontype.
+
+        LOOP AT lt_output_type ASSIGNING FIELD-SYMBOL(<fs_output_type>) .
+
+          CLEAR: ls_pdf_file, ls_output_type.
+
+          lo_sd_printout_static = /rb1m/cl_sd_printout_static=>get_instance( ).
+          ls_output_type = CORRESPONDING #( <fs_output_type> MAPPING
+                                                          codocument            = codocument
+                                                          document              = document
+                                                          outputtype            = messagetype
+                                                          application           = application
+                                                          language              = language
+                                                          parner                = partner
+                                                          partnerfunction       = partnerfunction
+                                                          programname           = programname
+                                                          routinename           = routinename
+                                                          pdfformname           = formname
+                                                          description           = description
+                                                          processstatus         = processstatus
+                                                          formtype              = formtype
+                                                          ).
+
+          lo_sd_printout_static->set_key_data( is_key = ls_output_type ).
+          IF <fs_output_type>-routinename IS NOT INITIAL AND
+            <fs_output_type>-programname IS NOT INITIAL .
+
+            PERFORM (<fs_output_type>-routinename) IN PROGRAM (<fs_output_type>-programname) USING '' ''.
+            IF sy-subrc = 0.
+
+              " BREAK-POINT.
+
+              ls_pdf_file = lo_sd_printout_static->get_fpformoutput( ).
+
+              IF ls_pdf_file-pdf IS NOT INITIAL.
+                CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~read_prefix_outputtype(
+                  EXPORTING
+                    iv_outputtype = <fs_output_type>-messagetype
+                  IMPORTING
+                    ev_prefix     = DATA(lv_prefix) ).
+              ENDIF.
+
+            ENDIF.
+          ENDIF.
+*         action type from PPF Framework....
+          IF <fs_output_type>-actiontype IS NOT INITIAL.
+            ls_ppf_act-ppf_action = <fs_output_type>-actiontype.
+            CALL METHOD /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~prepare_data_to_print_document(
+              EXPORTING
+                is_ppf_act    = ls_ppf_act
+                it_output     = VALUE #( ( <fs_output_type> ) )
+              IMPORTING
+                es_formoutput = DATA(ls_formoutput)
+            ).
+*           Get PDF from Action PPF....
+
+            ls_pdf_file = COND #( WHEN ls_formoutput IS NOT INITIAL
+                                  THEN ls_formoutput ).
+
+            IF ls_pdf_file-pdf IS NOT INITIAL.
+              CLEAR lv_prefix.
+              DATA(lv_messagetype) =  SWITCH #( <fs_output_type>-actiontype
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7a
+                                                      THEN 'YO7A'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7c
+                                                      THEN 'YO7C'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7d
+                                                      THEN 'YO7D'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7f
+                                                      THEN 'YO7F'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7g
+                                                      THEN 'YO7G'
+                                                      ).
+
+              CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~read_prefix_outputtype(
+                EXPORTING
+                  iv_outputtype = lv_messagetype
+                IMPORTING
+                  ev_prefix     = lv_prefix ).
+            ENDIF.
+
+          ENDIF.
+
+          APPEND VALUE #( carrier = <fs_output_type>-carrier
+                          carriername = <fs_output_type>-carriername
+                          freightorderdocument = <fs_output_type>-freightorderdocument
+                          codocument   = <fs_output_type>-codocument "consignment order
+                          vbeln        = <fs_output_type>-document " Object key in nast
+                          invoice      = <fs_output_type>-invoicedocument
+                          pdf_doc_type = lv_prefix
+                          kappl        = <fs_output_type>-application
+                          kschl        = <fs_output_type>-messagetype
+                          description  = <fs_output_type>-description
+                          tbpdf        = ls_pdf_file
+                          fudocument   = <fs_output_type>-fudocument
+                          vstel = <fs_output_type>-shippingpoint
+                          shippingpointaddressid = <fs_output_type>-shippingpointadressid
+                          ) TO et_shp_dlv_pdf.
+
+          lo_sd_printout_static->clear_key_data( ).
+        ENDLOOP.
+        IF lo_sd_printout_static IS BOUND.
+          lo_sd_printout_static->clear_instance( ).
+          CLEAR lo_sd_printout_static.
+        ENDIF.
+      CATCH /rb1m/cx_sd_printout_data_exc.
+        IF lo_sd_printout_static IS BOUND.
+          lo_sd_printout_static->clear_key_data( ).
+          lo_sd_printout_static->clear_instance( ).
+          CLEAR lo_sd_printout_static.
+        ENDIF.
+    ENDTRY.
+  ENDMETHOD.
