@@ -1,0 +1,489 @@
+unmanaged implementation in class /rb4r/cl_mm_gmmc_reqhead_bp unique;
+strict ( 2 );
+
+with draft;
+
+define behavior for /RB4R/MM_I_GMMC_RequestHeader alias RequestHeader
+
+draft table /rb4r/mm_drequst
+
+lock master
+total etag LastChangedAt
+authorization master ( instance )
+etag master LastChangedAt
+
+early numbering
+{
+  create;
+  update;
+  delete;
+
+  association _Comment { create; with draft; }
+  association _RequestItem { create; with draft; }
+
+  action ( features : instance ) submitRequest result [1] $self;
+  action ( features : instance ) approveRequest parameter /RB4R/MM_I_GMMC_ACTION_PARAM result [1] $self;
+  action ( features : instance ) rejectRequest parameter /RB4R/MM_I_GMMC_ACTION_PARAM result [1] $self;
+  action ( features : instance ) callBackRequest result [1] $self;
+  action ( features : instance ) forwardRequest parameter /RB4R/MM_I_GMMC_FW_PARAM result [1] $self;
+  action ( features : instance ) sendBackRequest parameter /RB4R/MM_I_GMMC_FW_PARAM result [1] $self;
+  action ( features : instance ) testAPI result [1] $self;
+  action ( features : instance ) resetSendBack result [1] $self;
+  action ( features : instance ) sendBackAll result [1] $self;
+  action ( features : instance ) uploadExcelData result [1] $self;
+
+  factory action Validation_Excel [1];
+
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft action Resume;
+
+  validation validate_fields on save { create; update; }
+
+  event approve_rq;
+
+  determination UploadItemsByExcel on modify { field Attachment; create; }
+
+  draft determine action Prepare
+  {
+    validation validate_fields;
+  }
+
+  field ( readonly ) RequestNumber;
+
+  mapping for /rb4r/mm_request control /rb4r/mm_s_gmmc_requestheader corresponding
+    {
+      RequestNumber = requestno;
+      SystemID      = systemid;
+      Plant         = plant;
+      CreatedBy     = createdby;
+      CreatedOn     = createddate;
+      Status        = status;
+      WorkItemID    = workitemid;
+      Description   = description;
+      RequestType   = req_type;
+      Action        = action;
+      ProductType   = product_type;
+    }
+
+}
+
+define behavior for /RB4R/MM_I_GMMC_COMMENT alias Comment
+implementation in class /rb4r/cl_mm_gmmc_comment_bp unique
+
+draft table /rb4r/mm_dcommnt
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, CreatedOn, CreatedBy; //, ChangedBy, ChangedOn;
+  association _RequestHeader { with draft; }
+
+  mapping for /rb4r/mm_cmmnt control /rb4r/mm_s_gmmc_comment
+    {
+      RequestNumber = requestno;
+      CreatedOn     = createdon;
+      CreatedBy     = createdby;
+      //Status        = status;
+      Comments      = comments;
+    }
+}
+
+define behavior for /RB4R/MM_I_GMMC_RequestItem alias RequestItem
+implementation in class /rb4r/cl_mm_gmmc_reqitems_bp unique
+
+draft table /rb4r/mm_dreqits
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+
+  factory action duplicateCheck [1];
+  action ( features : instance ) createMaterial result [1] $self;
+  field ( readonly ) RequestNumber;
+  field ( readonly ) RequestItem;
+
+  association _RequestHeader { with draft; }
+  association _DocumentList { create; with draft; }
+  association _EquipmentBOM { create; with draft; }
+  association _SchedulingAgreement { create; with draft; }
+  association _PoText { create; with draft; }
+  association _RequestValErr { create; with draft; }
+  association _MaterialScalePrice { create; with draft; }
+  association _UsrActionLog { create; with draft; }
+  association _SourceList { create; with draft; }
+  //  association _IndiraPrefer { create; with draft; }
+  //  association _IndiraVal { create; with draft; }
+
+  mapping for /rb4r/mm_rqitem control /rb4r/mm_s_gmmc_requestitems corresponding
+    {
+      RequestNumber          = requestno;
+      RequestItem            = requestitem;
+      MaterialNumber         = materialno;
+      Plant                  = werks;
+      CreditorName           = creditorname;
+      CreditorNumber         = creditornumber;
+      PartNumber             = partnumber;
+      TypeCode               = typecode;
+      EAN                    = ean;
+      BaseUom                = baseuom;
+      ReorderPoint           = mb;
+      MaxStockLevel          = hb;
+      MaterialGroup          = materialgroup;
+      TypeShortDescp         = typeshortdescription;
+      MaterialStatus         = materialstatus;
+      MaterialType           = materialtype;
+      TermCode               = termcode;
+      UserStatus             = user_status;
+      EquipmentNumber        = equnr;
+      ConsumptionValue       = estconsumperyear;
+      PricePerItem           = priceperitem;
+      PriceUnit              = priceunit;
+      Currency               = currency;
+      IsSupplier             = is_supplier;
+      IsManufactr            = is_manufactr;
+      RepairMaterial         = repair_material;
+      StorageLocation        = storage_location;
+      PurchOrg               = purchorg;
+      InfoRecord             = inforecord;
+      InfoRecordType         = inforecordtype;
+      PlanDeliveryTime       = plandeliverytime;
+      StandardQuantity       = standardquantity;
+      BaseUomUnit            = baseuomunit;
+      OrderUom               = orderuom;
+      OrderUomUnit           = orderuomunit;
+      PriceUom               = priceuom;
+      MFRPartNumber          = mfrpartnumber;
+      MFRNumber              = mfrnumber;
+      ClassId                = class_id;
+      RecordYearlyVol        = yearlyvolume;
+      ConfirmationControlKey = confctrlkey;
+      AcknowledgmentReq      = acknowledgreq;
+      MinimumPOQuantity      = minquan;
+      LocalPlantMaterialText = local_mat_text;
+      TaxCode                = taxcode;
+      Contract               = contract;
+      BlockingFlag           = blockingflag;
+      BEBlockingFlag         = be_blockingflag;
+      LineComment            = linecomment;
+      IsGreatestMATGRPFlag   = is_greatest_matgrp;
+      IsConfiguration        = is_configuration;
+      IsFixedSupplSRC        = is_fixed_supplsrc;
+      PreConsum              = preconsum;
+      TermCodeDesc           = termcddesc;
+      NoDispoFlag            = nodispoflg;
+      PlantUf1               = plantuf1;
+      PreConsumFlag          = preconsum_flg;
+      ExistedPartNoFlag      = exstprtno_flg;
+      IsTakeOver             = istakeover;
+      ExternalProductID      = extprodid;
+      PurchaseOrderNo        = purchaseorderno;
+      IsExistingScale        = isexistingscale;
+      IsExistingSourceList   = isexistingsourcelist;
+      IsExistingSA           = isexistingsa;
+      SchedulingAgreementNo  = schedulingagreeno;
+      SrcLstNo               = SrcLstNo;
+      CostCenter             = costcenter;
+      WorkItemID             = workitemid;
+      IsSendBack             = issendback;
+    }
+}
+
+
+
+define behavior for /RB4R/MM_I_GMMC_Document alias Document
+implementation in class /rb4r/cl_mm_gmmc_document_bp unique
+
+draft table /rb4r/mm_ddocmnt
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag master LastChangedAt
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem, DocumentLineItem;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+  mapping for /rb4r/mm_docls
+    {
+      RequestNumber    = requestno;
+      RequestItem      = requestitem;
+      DocumentLineItem = docitem;
+      FileType         = filetype;
+      Attachment       = attachment;
+      MimeType         = mimetype;
+      FileName         = filename;
+      CreatedBy        = local_created_by;
+      CreatedOn        = local_created_at;
+      ChangedBy        = local_last_changed_by;
+      ChangedOn        = local_last_changed_at;
+      LastChangedAt    = last_changed_at;
+    }
+
+}
+
+define behavior for /RB4R/MM_I_GMMC_SourceList alias SourceList
+implementation in class /rb4r/cl_mm_gmmc_sourcelist_bp unique
+
+draft table /rb4r/mm_dsrls
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem, Plant, SourceListItem;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+  mapping for /rb4r/mm_srcls control /rb4r/mm_s_gmmc_sourcelist corresponding
+    {
+      RequestNumber                 = requestno;
+      RequestItem                   = requestitem;
+      SourceListItem                = srclsitem;
+      Plant                         = werks;
+      sourcelistrecord              = zeord;
+      CreatedOn                     = erdat;
+      CreatedBy                     = ernam;
+      ValidStart                    = vdatu;
+      ValidEnd                      = bdatu;
+      VendorNumber                  = lifnr;
+      FixedSupplier                 = flifn;
+      AgreementNumber               = ebeln;
+      AgreementItem                 = ebelp;
+      FixedOutAgreementItem         = febel;
+      PlantMaterialProcured         = reswk;
+      FixedIssuing                  = fresw;
+      MaterialPartNumber            = ematn;
+      BlockedSourceSupply           = notkz;
+      PurchasingOrganization        = ekorg;
+      PurchasingDocumentCategory    = vrtyp;
+      CategorySourceListRecord      = eortp;
+      SourceListInMaterialsPlanning = autet;
+      UnitOfMeasure                 = meins;
+      LogicalSystem                 = logsy;
+      SpecialStockIndicator         = sobkz;
+      CentralContract               = srm_contract_id;
+      CentralContractItem           = srm_contract_itm;
+    }
+
+}
+
+
+define behavior for /RB4R/MM_I_GMMC_EquipmentBOM alias EquipmentBOM
+implementation in class /rb4r/cl_mm_gmmc_equipBOM_bp unique
+
+draft table /rb4r/mm_dequpmt
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem, EquipmentBOMLineItem;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+  mapping for /rb4r/mm_eq_bm control /rb4r/mm_s_gmmc_equipmentbom corresponding
+    {
+      RequestNumber        = requestno;
+      RequestItem          = requestitem;
+      EquipmentBOMLineItem = eqpmlineitem;
+      EquipmentNumber      = equipmentno;
+      Description          = description;
+      Plant                = plant;
+      ValidFrom            = valid_from;
+      ValidTo              = valid_to;
+      ActionFlag           = actionflag;
+    }
+}
+define behavior for /RB4R/MM_I_GMMC_MMSA alias SchedulingAgreement
+implementation in class /rb4r/cl_mm_gmmc_mmsa_bp unique
+
+draft table /rb4r/mm_dsa
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+
+  mapping for /rb4r/mm_sag control /rb4r/mm_s_gmmc_sag corresponding
+    {
+      RequestNumber = requestno;
+      RequestItem   = requestitem;
+      SAItem        = sagitem;
+      SANumber      = sagnumber;
+      PurDocNumber  = ponumber;
+      YearlyVolumme = yearlyvolume;
+      ConfContrlKey = confctrlkey;
+      OrdAckReq     = acknowledgreq;
+      MinQuan       = minquan;
+      ShipInstr     = shipinstr;
+      SAType        = sagtype;
+      Sloc          = sagsloc;
+      SAValidStart  = sagvalidstart;
+      SAValidEnd    = sagvalidend;
+      AccAssCat     = acctasscat;
+      UpdateFlag    = updateflag;
+      RelCreateProf = ABUEB;
+      AddNumber     = adrn2;
+      UnloadPoint   = LGBZO;
+      Email         = SMTP_ADDR;
+      CurrCode      = currcode;
+      UnitCode      = unitcode;
+    }
+}
+
+define behavior for /RB4R/MM_I_GMMC_POText alias PoText
+implementation in class /rb4r/cl_mm_gmmc_PoText_bp unique
+
+draft table /rb4r/mm_dpotext
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem, POTextItem;
+  field ( mandatory ) Language, Text;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+
+  mapping for /rb4r/mm_potxt control /rb4r/mm_s_gmmc_potext corresponding
+    {
+      RequestNumber = REQUESTNO;
+      RequestItem   = REQUESTITEM;
+      POTextItem    = POTXTITEM;
+      Language      = LANGUAGE;
+      Text          = TEXT;
+      UpdateFlag    = updateflag;
+    }
+}
+
+define behavior for /RB4R/MM_I_GMMC_RequestValErr alias RequestValErr
+implementation in class /rb4r/cl_mm_gmmc_reqValErr_bp unique
+draft table /rb4r/mm_drqvale
+late numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+  mapping for /rb4r/mm_logs
+    {
+      RequestNumber    = requestno;
+      RequestItem      = requestitem;
+      Counter          = counter;
+      FieldName        = fname;
+      MessageID        = msgid;
+      MessageNumber    = msgno;
+      MessageType      = msgty;
+      MessageVariable1 = msgv1;
+      MessageVariable2 = msgv2;
+      MessageVariable3 = msgv3;
+      MessageVariable4 = msgv4;
+    }
+}
+
+define behavior for /RB4R/MM_I_GMMC_ScalePrice alias ScalePrice
+implementation in class /rb4r/cl_mm_gmmc_scaleprice_bp unique
+
+draft table /rb4r/mm_dsclpri
+
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem, ScaleItem;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+
+  mapping for /rb4r/mm_rqscl control /rb4r/mm_s_gmmc_matscaleprice corresponding
+    {
+      RequestNumber = requestno;
+      RequestItem   = requestitem;
+      ScaleItem     = scaleitem;
+      PriceUnit     = priceunit;
+      Quantity      = quantity;
+      Amount        = amount;
+      ActionFlag    = actionflag;
+      UnitOfMeasure = meins;
+      Currency      = waers;
+      UpdateFlag    = UpdateFlag;
+    }
+}
+
+define behavior for /RB4R/MM_I_GMMC_UserActionLog alias UserActionLog
+implementation in class /rb4r/cl_mm_gmmc_usractlog_bp unique
+
+draft table /rb4r/mm_dusalog
+early numbering
+lock dependent by _RequestHeader
+authorization dependent by _RequestHeader
+etag dependent by _RequestHeader
+{
+  update;
+  delete;
+  field ( readonly ) RequestNumber, RequestItem;
+  field ( readonly : update )
+  timestamp;
+  association _RequestHeader abbreviation RequestHeader { with draft; }
+  association _RequestItem { with draft; }
+  mapping for /rb4r/mm_actlog control /rb4r/mm_s_gmmc_actlog corresponding
+    {
+      RequestNumber = requestno;
+      RequestItem   = requestitem;
+      step          = step;
+      timestamp     = timestamp;
+      actiontype    = actiontype;
+      actionby      = actionby;
+      actionbyproxy = actionbyproxy;
+      forwardto     = forwardto;
+    }
+}
+
+
+//
+//define behavior for /RB4R/MM_I_GMMC_UserVariant alias UserVariant
+//implementation in class /rb4r/cl_mm_gmmc_uservariant_bp unique
+//
+//draft table /rb4r/mm_dusalog
+//late numbering
+//lock dependent by _RequestHeader
+//authorization dependent by _RequestHeader
+//etag dependent by _RequestHeader
+//{
+//  update;
+//  delete;
+//  association _RequestHeader abbreviation RequestHeader { with draft; }
+//  association _RequestItem { with draft; }
+//}
