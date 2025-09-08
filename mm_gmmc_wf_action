@@ -1,0 +1,123 @@
+FUNCTION /rb4r/mm_gmmc_wf_action
+  IMPORTING
+    VALUE(iv_request_no) TYPE /rb4r/mm_requestno
+    VALUE(iv_plant) TYPE werks_d
+    VALUE(iv_request_type) TYPE /rb4r/mm_req_type
+    VALUE(iv_action_type) TYPE /rb4r/mm_actiontype
+    VALUE(iv_workitemid) TYPE sww_wiid OPTIONAL
+    VALUE(iv_fw_from_user) TYPE xubname OPTIONAL
+    VALUE(iv_fw_to_user) TYPE xubname OPTIONAL
+    VALUE(iv_sb_to_user) TYPE xubname OPTIONAL.
+
+
+
+  DATA: lv_objtype          TYPE sibftypeid,
+        lv_objkey           TYPE sibfinstid,
+        lv_event            TYPE sibfevent,
+        lr_event_parameters TYPE REF TO if_swf_ifs_parameter_container,
+        lv_param_name       TYPE swfdname,
+        lv_id               TYPE char10,
+        lt_work_items       TYPE TABLE OF swwwihead,
+        ls_work_items       TYPE swwwihead,
+        ls_wrk_id           TYPE swr_struct-workitemid,
+        lv_ret_code         LIKE sy-subrc,
+        lt_msg_lines        TYPE TABLE OF swr_messag,
+        lt_msg_struct       TYPE TABLE OF swr_mstruc,
+        lv_retcode          TYPE sy-subrc,
+        lt_receipents       TYPE TABLE OF swragent,
+        lt_receipents_sort  TYPE SORTED TABLE OF swragent WITH NON-UNIQUE KEY otype objid,
+        lt_message_lines    TYPE TABLE OF swr_messag,
+        lt_msg_str          TYPE TABLE OF  swr_mstruc,
+        lv_decision_key     TYPE swr_decikey.
+
+  DATA lo_gmmc_wf TYPE REF TO /rb4r/cl_mm_gmmc_wf_trigger.
+
+*  AUTHORITY-CHECK OBJECT 'S_DEVELOP'
+*     ID 'DEVCLASS' FIELD '*'
+*     ID 'OBJTYPE' FIELD '*'
+*     ID 'OBJNAME' FIELD '*'
+*     ID 'P_GROUP' FIELD '*'
+*     ID 'ACTVT' FIELD '03'.
+*  IF sy-subrc <> 0.
+**    MESSAGE 'Authority error '(001) TYPE 'E' RAISING authority.
+*    DATA(lv_flag) = 'X'.
+*  ENDIF.
+
+*  AUTHORITY-CHECK OBJECT 'S_WF_WI'
+*     ID 'WI_TYPE' FIELD 'B'
+*     ID 'TASK_CLASS' FIELD '*'
+*     ID 'WFACTVT' FIELD '28'.
+*  IF sy-subrc <> 0.
+**    MESSAGE 'Authority error '(001) TYPE 'E' RAISING authority.
+*    DATA(lv_flag) = 'X'.
+*  ENDIF.
+
+  AUTHORITY-CHECK OBJECT '/RB4R/GMMC'
+   ID '/RB4R/GMMC' DUMMY.
+  IF sy-subrc <> 0.
+    DATA(lv_auth) = abap_false.
+  ENDIF.
+
+  CASE iv_action_type.
+    WHEN 6. "Submit request
+      /rb4r/cl_mm_gmmc_wf_trigger=>submit(
+        iv_request_number = iv_request_no
+        iv_plant          = iv_plant
+        iv_request_type   = iv_request_type
+        iv_workitemid     = iv_workitemid
+      ).
+
+    WHEN 1. "Approve request
+      /rb4r/cl_mm_gmmc_wf_trigger=>approve(
+        iv_request_number = iv_request_no
+        iv_plant          = iv_plant
+        iv_request_type   = iv_request_type
+        iv_workitemid     = iv_workitemid
+      ).
+
+    WHEN 2. "Reject request
+      /rb4r/cl_mm_gmmc_wf_trigger=>reject(
+        iv_request_number = iv_request_no
+        iv_plant          = iv_plant
+        iv_request_type   = iv_request_type
+        iv_workitemid     = iv_workitemid
+      ).
+
+    WHEN 8. "Send back to purchasing from datafab
+      /rb4r/cl_mm_gmmc_wf_trigger=>sendback(
+        iv_request_number = iv_request_no
+        iv_plant          = iv_plant
+        iv_request_type   = iv_request_type
+        iv_workitemid     = iv_workitemid
+        iv_sendbackuser   = iv_sb_to_user
+      ).
+
+    WHEN 4. "Call back
+      /rb4r/cl_mm_gmmc_wf_trigger=>callback(
+        iv_request_number = iv_request_no
+        iv_plant          = iv_plant
+        iv_request_type   = iv_request_type
+        iv_workitemid     = iv_workitemid
+      ).
+
+    WHEN 3. "Forward
+      /rb4r/cl_mm_gmmc_wf_trigger=>forward(
+        iv_request_number = iv_request_no
+        iv_plant          = iv_plant
+        iv_request_type   = iv_request_type
+        iv_workitemid     = iv_workitemid
+        iv_fw_from_user   = iv_fw_from_user
+        iv_fw_to_user     = iv_fw_to_user
+      ).
+
+    WHEN OTHERS.
+
+
+  ENDCASE.
+
+* COMMENTED - update action comment will be handled in workflow exit
+**** Update Action into table comment
+*  /rb4r/cl_mm_gmmc_auxiliary=>update_action( EXPORTING iv_request_no = iv_request_no
+*                                                       iv_action_type = iv_action_type ).
+
+ENDFUNCTION.
