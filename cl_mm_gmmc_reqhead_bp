@@ -1,0 +1,1103 @@
+CLASS lhc_mm_i_gmmc_requestheader DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PUBLIC SECTION.
+    DATA: gt_return TYPE bapiret2_tt.
+    DATA: md_finished TYPE abap_bool.
+    METHODS task_finished
+      IMPORTING p_task TYPE char32.
+  PRIVATE SECTION.
+*    TYPES tt_request_failed    TYPE TABLE FOR FAILED   /RB4R/MM_I_GMMC_RequestHeader.
+*    TYPES tt_request_reported  TYPE TABLE FOR REPORTED /RB4R/MM_I_GMMC_RequestHeader.
+*    TYPES tt_requestitem_failed   TYPE TABLE FOR FAILED   /RB4R/MM_I_GMMC_RequestItem.
+*    TYPES tt_requestitem_reported TYPE TABLE FOR REPORTED /RB4R/MM_I_GMMC_RequestItem.
+*    TYPES tt_messages TYPE STANDARD TABLE OF /rb4r/mm_logs.
+
+
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR requestheader RESULT result.
+
+    METHODS create FOR MODIFY
+      IMPORTING entities FOR CREATE requestheader.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE requestheader.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE requestheader.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ requestheader RESULT result.
+
+    METHODS lock FOR LOCK
+      IMPORTING keys FOR LOCK requestheader.
+
+    METHODS rba_comment FOR READ
+      IMPORTING keys_rba FOR READ requestheader\_comment FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_requestitem FOR READ
+      IMPORTING keys_rba FOR READ requestheader\_requestitem FULL result_requested RESULT result LINK association_links.
+
+    METHODS cba_comment FOR MODIFY
+      IMPORTING entities_cba FOR CREATE requestheader\_comment.
+
+    METHODS cba_requestitem FOR MODIFY
+      IMPORTING entities_cba FOR CREATE requestheader\_requestitem.
+
+    METHODS get_instance_features FOR INSTANCE FEATURES
+      IMPORTING keys REQUEST requested_features FOR requestheader RESULT result.
+
+    METHODS approverequest FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~approverequest RESULT result.
+
+    METHODS rejectrequest FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~rejectrequest RESULT result.
+
+    METHODS validate_fields FOR VALIDATE ON SAVE
+      IMPORTING keys FOR requestheader~validate_fields.
+
+    METHODS uploaditemsbyexcel FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR requestheader~uploaditemsbyexcel.
+
+    METHODS validation_excel FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~validation_excel .
+
+    METHODS earlynumbering_cba_comment FOR NUMBERING
+      IMPORTING entities FOR CREATE requestheader\_comment.
+
+    METHODS earlynumbering_create FOR NUMBERING
+      IMPORTING entities FOR CREATE requestheader.
+
+    METHODS earlynumbering_cba_requestitem FOR NUMBERING
+      IMPORTING entities FOR CREATE requestheader\_requestitem.
+
+    METHODS submitrequest FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~submitrequest RESULT result.
+
+    METHODS callbackrequest FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~callbackrequest RESULT result.
+
+    METHODS forwardrequest FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~forwardrequest RESULT result.
+
+    METHODS sendbackrequest FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~sendbackrequest RESULT result.
+
+    METHODS sendbackall FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~sendbackall RESULT result.
+
+    METHODS testapi FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~testapi RESULT result.
+
+    METHODS resetsendback FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~resetsendback RESULT result.
+
+    METHODS uploadexceldata FOR MODIFY
+      IMPORTING keys FOR ACTION requestheader~uploadexceldata RESULT result.
+
+*    METHODS map_messages
+*      IMPORTING
+*        cid           TYPE string         OPTIONAL
+*        RequestNumber TYPE /RB4R/MM_I_GMMC_RequestHeader-RequestNumber OPTIONAL
+*        messages      TYPE tt_messages
+*      EXPORTING
+*        failed_added  TYPE abap_bool
+*      CHANGING
+*        failed        TYPE tt_request_failed
+*        reported      TYPE tt_request_reported.
+
+ENDCLASS.
+
+CLASS lhc_mm_i_gmmc_requestheader IMPLEMENTATION.
+
+  METHOD get_instance_authorizations.
+
+  ENDMETHOD.
+
+  METHOD create.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance( )->/rb4r/if_mm_gmmc_reqhead~create(
+      EXPORTING it_entities = entities
+      CHANGING  ct_mapped   = mapped-requestheader
+                ct_failed   = failed-requestheader
+                ct_reported = reported-requestheader ).
+
+  ENDMETHOD.
+
+  METHOD update.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~update(
+      EXPORTING
+        entities    = entities
+      CHANGING
+        ct_mapped   = mapped-requestheader
+        ct_failed   = failed
+        ct_reported = reported
+    ).
+  ENDMETHOD.
+
+  METHOD delete.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~delete(
+      EXPORTING
+        it_keys     = keys
+      CHANGING
+        ct_mapped   = mapped
+        ct_failed   = failed
+        ct_reported = reported
+    ).
+  ENDMETHOD.
+
+  METHOD read.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~read(
+      EXPORTING
+        it_keys     = keys
+      CHANGING
+        ct_result   = result
+        ct_failed   = failed
+        ct_reported = reported
+    ).
+  ENDMETHOD.
+
+**********************************************************************
+*
+* Implements the locking logic
+*
+**********************************************************************
+  METHOD lock.
+    TRY.
+        "Instantiate lock object
+        DATA(lo_lock) = cl_abap_lock_object_factory=>get_instance( iv_name = '/RB4R/EMM_REQ' ).
+      CATCH cx_abap_lock_failure INTO DATA(exception).
+        RAISE SHORTDUMP exception.
+    ENDTRY.
+
+    LOOP AT keys ASSIGNING FIELD-SYMBOL(<request>).
+      TRY.
+          "enqueue travel instance
+          lo_lock->enqueue(
+            it_parameter = VALUE #( ( name = 'REQUESTNO' value = REF #( <request>-requestnumber ) ) )
+          ).
+          "if foreign lock exists
+        CATCH cx_abap_foreign_lock INTO DATA(foreign_lock).
+          APPEND VALUE #(
+          requestnumber = keys[ 1 ]-requestnumber
+          %msg          = new_message_with_text(
+          severity = if_abap_behv_message=>severity-error
+          text     = 'Record is locked by' && foreign_lock->user_name
+          )
+          ) TO reported-requestheader.
+          APPEND VALUE #( requestnumber = keys[ 1 ]-requestnumber )
+          TO  failed-requestheader.
+
+
+        CATCH cx_abap_lock_failure INTO exception.
+          RAISE SHORTDUMP exception.
+      ENDTRY.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD rba_comment.
+  ENDMETHOD.
+
+  METHOD rba_requestitem.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~rba_requestitem(
+      EXPORTING
+        it_keys_rba          = keys_rba
+        iv_result_requested  = result_requested
+      CHANGING
+        ct_result            = result
+        ct_association_links = association_links
+        ct_failed            = failed
+        ct_reported          = reported
+    ).
+  ENDMETHOD.
+
+  METHOD cba_comment.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~cba_comment(
+      EXPORTING
+        it_entities_cba = entities_cba
+      CHANGING
+        ct_mapped       = mapped
+        ct_failed       = failed
+        ct_reported     = reported
+    ).
+  ENDMETHOD.
+
+
+**********************************************************************
+*
+* Create associated Request Item instances
+*
+**********************************************************************
+  METHOD cba_requestitem.
+
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~cba_requestitem(
+      EXPORTING
+        it_entities_cba =  entities_cba
+      CHANGING
+        ct_mapped       = mapped
+        ct_failed       = failed
+        ct_reported     = reported
+    ).
+  ENDMETHOD.
+
+**********************************************************************
+*
+* Map messages from legacy type to failed and reported
+*
+**********************************************************************
+*  METHOD map_messages.
+*    failed_added = abap_false.
+*    LOOP AT messages INTO DATA(message).
+*      IF message-msgty = 'E' OR message-msgty = 'A'.
+*        APPEND VALUE #( %cid        = cid
+*                        RequestNumber    = RequestNumber
+*                        %fail-cause = /rb4r/cl_mm_gmmc_auxiliary=>get_cause_from_message(
+*                                        msgid = message-msgid
+*                                        msgno = message-msgno
+*                                      ) )
+*               TO failed.
+*        failed_added = abap_true.
+*      ENDIF.
+*
+*      APPEND VALUE #( %msg          = new_message(
+*                                        id       = message-msgid
+*                                        number   = message-msgno
+*                                        severity = if_abap_behv_message=>severity-error
+*                                        v1       = message-msgv1
+*                                        v2       = message-msgv2
+*                                        v3       = message-msgv3
+*                                        v4       = message-msgv4 )
+*                      %cid          = cid
+*                      RequestNumber      = RequestNumber )
+*             TO reported.
+*    ENDLOOP.
+*  ENDMETHOD.
+********************************************************************************
+
+* Implements the dynamic action handling for request instances
+*
+********************************************************************************
+  METHOD get_instance_features.
+
+  ENDMETHOD.
+
+  METHOD testapi.
+    TYPES: zty_scales TYPE STANDARD TABLE OF /rb4r/mm_rqscl WITH EMPTY KEY,
+           zty_n_ers  TYPE STANDARD TABLE OF /rb4r/mm_n_ers WITH EMPTY KEY.
+    DATA: lt_item1  TYPE /rb4r/mm_tt_item,
+          lt_return TYPE bapiret2_t,
+          ld_task   TYPE char32 VALUE 'GMMC_API'.
+
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+       ENTITY requestheader
+       FIELDS ( requestnumber )
+       WITH CORRESPONDING #( keys )
+       RESULT DATA(request_read_results)
+*       ENTITY RequestHeader BY \_RequestItem
+       BY \_requestitem
+       ALL FIELDS
+       WITH CORRESPONDING #( keys )
+       RESULT DATA(lt_item)
+       ENTITY requestitem BY \_potext
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_potext)
+       ENTITY requestitem BY \_sourcelist
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_sl)
+       ENTITY requestitem BY \_documentlist
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_doc)
+       ENTITY requestitem BY \_schedulingagreement
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_mmsa)
+       FAILED failed
+       .
+
+    " Get data prepare for create IR
+*    SELECT * FROM /rb4r/mm_rqscl                          "#EC CI_SUBRC
+*        FOR ALL ENTRIES IN @lt_item
+*        WHERE requestno = @lt_item-RequestNumber
+*        AND requestitem = @lt_item-RequestItem
+*        INTO TABLE @DATA(lt_scales0).
+*    IF sy-subrc <> 0.
+*      DATA(lv_nodata) = abap_true.
+*    ENDIF.
+
+*    SELECT *
+*        FROM /rb4r/mm_n_ers
+*        INTO TABLE @DATA(lt_n_ers0)
+*        FOR ALL ENTRIES IN @lt_item
+*        WHERE werks = @lt_item-Plant
+*          AND ekorg = @lt_item-purchorg
+*          AND inactiv = ''.
+
+    LOOP AT lt_item INTO DATA(ls_item).
+
+*      "check material exist
+*      IF ls_item-materialnumber IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input Material Number'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check plant exist
+*      IF ls_item-plant IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input Plant'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check Currency exist
+*      IF ls_item-currency IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input Currency'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check plandeliverytime exist
+*      IF ls_item-plandeliverytime IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input plandeliverytime'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check priceperitem exist
+*      IF ls_item-priceperitem IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input priceperitem'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check SUPPLIER exist
+*      IF ls_item-creditornumber IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input CreditorNumber'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+**      "check PurchaseOrderNo exist
+**      IF ls_item-PurchaseOrderNo IS INITIAL.
+**        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+**        APPEND VALUE #( %tky = ls_item-%tky
+**                        %msg = new_message_with_text(
+**                        severity = if_abap_behv_message=>severity-error
+**                        text = 'Please input PurchaseOrderNo'
+**                        )
+**
+**        ) TO reported-requestitem.
+**      ENDIF.
+*      "check MinimumPOQuantity exist
+*      IF ls_item-minimumpoquantity IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input MinimumPOQuantity Number'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check StandardQuantity exist
+*      IF ls_item-standardquantity IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input StandardQuantity'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check material group exist
+*      IF ls_item-materialgroup IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input Material Group'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*      "check Base Uom exist
+*      IF ls_item-baseuom IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input Base Uom'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+*
+*      "check Purch. Organization
+*      IF ls_item-purchorg IS INITIAL.
+*        APPEND VALUE #( %tky = ls_item-%tky ) TO failed-requestitem.
+*        APPEND VALUE #( %tky = ls_item-%tky
+*                        %msg = new_message_with_text(
+*                        severity = if_abap_behv_message=>severity-error
+*                        text     = 'Please input Purch. Organization'
+*                        )
+*
+*        ) TO reported-requestitem.
+*      ENDIF.
+
+      CHECK failed-requestitem IS INITIAL.
+
+*      RAISE ENTITY EVENT /rb4r/mm_i_gmmc_requestheader~approve_rq
+*      FROM CORRESPONDING #( request_read_results ).
+
+      " PO text creation Flag
+      IF line_exists( lt_potext[ KEY entity requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ] ).
+        DATA(lv_po) = abap_true.
+      ELSE.
+        lv_po = abap_false.
+      ENDIF.
+
+      " Source List creation Flag
+      IF line_exists( lt_sl[ KEY entity requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ] ).
+        IF lt_sl[ requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ]-updateflag = 'C'.
+          DATA(lv_sl) = 'C'.
+        ELSEIF lt_sl[ requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ]-updateflag = 'U'.
+          lv_sl = 'U'.
+        ENDIF.
+      ENDIF.
+
+      " Attachment creation Flag
+      IF line_exists( lt_doc[ KEY entity requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ] ).
+        DATA(lv_att) = abap_true.
+      ELSE.
+        lv_att = abap_false.
+      ENDIF.
+
+      IF ls_item-inforecord IS INITIAL.
+        DATA(lv_ir) = abap_true.
+        "        DATA(lt_scales) = VALUE zty_scales( FOR <fs_scales> IN lt_scales0 WHERE ( requestno = ls_item-RequestNumber
+        "                                                                              AND requestitem = ls_item-RequestItem )
+        "                                               ( CORRESPONDING #( <fs_scales> ) ) ).
+        "        DATA(lt_n_ers) = VALUE zty_n_ers( FOR <fs_n_ers> IN lt_n_ers0 WHERE ( werks = ls_item-Plant
+        "                                                                          AND ekorg = ls_item-purchorg )
+        "                                         ( CORRESPONDING #( <fs_n_ers> ) )  ).
+      ELSEIF lv_att = abap_true.
+        DATA(lv_gos) = abap_true.
+      ENDIF.
+
+      IF ls_item-materialnumber IS NOT INITIAL.
+        DATA(lv_dms) = abap_true.
+      ENDIF.
+
+      IF line_exists(  lt_mmsa[  KEY entity requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ] ).
+        IF lt_mmsa[ requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ]-updateflag = 'C'.
+          DATA(lv_mmsa) = 'C'.
+        ELSEIF lt_mmsa[ requestnumber = ls_item-requestnumber requestitem = ls_item-requestitem ]-updateflag = 'U'.
+          lv_mmsa = 'U'.
+        ENDIF.
+      ENDIF.
+
+      CLEAR: gt_return.
+      lt_item1 = VALUE #( ( CORRESPONDING #( ls_item ) ) ).
+      CALL FUNCTION '/RB4R/MM_GMMC_API'
+        STARTING NEW TASK ld_task
+        CALLING task_finished ON END OF TASK
+        EXPORTING
+          request_no = ls_item-requestnumber
+          item       = ls_item-requestitem
+          f_ir       = lv_ir
+          f_po       = lv_po
+          f_sl       = lv_sl
+          f_mmsa     = lv_mmsa
+          f_gos      = lv_gos
+          f_dms      = lv_dms
+        TABLES
+          pt_return  = lt_return.
+      WAIT FOR ASYNCHRONOUS TASKS UNTIL md_finished = abap_true.
+
+      IF lines( gt_return ) > 0.
+        lt_return = VALUE #( FOR <fs_return> IN gt_return
+                             ( CORRESPONDING #( <fs_return> ) )
+                           ).
+      ENDIF.
+      CHECK lt_return IS INITIAL.
+      CLEAR: lt_item1,lv_sl,lv_mmsa,gt_return.
+    ENDLOOP.
+
+
+*    "Testing Indira Material creation
+*    READ ENTITIES OF /RB4R/MM_I_GMMC_RequestHeader IN LOCAL MODE
+*         ENTITY RequestHeader
+*         FIELDS ( RequestNumber )
+*         WITH CORRESPONDING #( keys )
+*         RESULT DATA(request_read_results)
+*         FAILED failed.
+*       result     = VALUE #( FOR request_read_result IN request_read_results
+*                      ( %tky = request_read_result-%tky ) ).
+*
+*    LOOP AT result ASSIGNING FIELD-SYMBOL(<request>).
+*      /rb4r/cl_mm_gmmc_auxiliary=>create_basic_view_indira(
+*        EXPORTING
+*       iv_requestno   = <request>-RequestNumber
+*       iv_requestitem = 1
+*        IMPORTING
+*       ev_materialno  = DATA(created_material)
+*       et_messages    = DATA(return_messages)
+*      ).
+*
+*       DATA(process_request_number) = <request>-RequestNumber.
+*
+*    ENDLOOP.
+*
+*    READ ENTITY /RB4R/MM_I_GMMC_RequestHeader
+*    BY \_RequestItem  ALL FIELDS
+*    WITH VALUE #( ( %key-RequestNumber = <request>-RequestNumber ) )
+*    RESULT DATA(lt_read_items).
+*
+*    MODIFY ENTITIES OF /RB4R/MM_I_GMMC_RequestHeader
+*      ENTITY RequestItem
+*      UPDATE FIELDS ( MaterialNumber ) WITH lt_read_items
+*      CREATE BY \_RequestItem AUTO FILL CID
+*      WITH lt_requestitem_create
+*      FAILED DATA(ls_failed_crt)
+*      REPORTED DATA(ls_reported_crt)
+*      MAPPED DATA(ls_mapped_crt) .
+**
+  ENDMETHOD.
+
+  METHOD resetsendback.
+    " ------------------------------------------------------------------
+    " 1. Read the associated RequestItem.
+    " ------------------------------------------------------------------
+    "Read Request Item Entity
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+    ENTITY requestheader BY \_requestitem ALL FIELDS WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_item)
+    REPORTED DATA(lt_reported)
+    FAILED DATA(lt_failed).
+
+    " ------------------------------------------------------------------
+    " 2. Prepare the data for modification using EML.
+    " ------------------------------------------------------------------
+    IF lt_item IS NOT INITIAL.
+      DATA lt_requestitem_update TYPE TABLE FOR UPDATE /rb4r/mm_i_gmmc_requestitem.
+
+      lt_requestitem_update = VALUE #( FOR item IN lt_item ( %tky                = item-%tky
+                                                             issendback          = ''   "Clear sendback flag
+                                                             %control-issendback = if_abap_behv=>mk-on ) ).
+    ENDIF.
+
+    " ------------------------------------------------------------------
+    " 3. Execute the modification using a single EML statement.
+    " ------------------------------------------------------------------
+    "Modify entity
+    MODIFY ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+      ENTITY requestitem
+        UPDATE FROM lt_requestitem_update
+      MAPPED DATA(ls_mapped)
+      FAILED DATA(ls_failed)
+      REPORTED DATA(ls_reported).
+
+*     " ------------------------------------------------------------------
+*    " 4. Set the result for the action.
+*    " The framework will use this to refresh the UI.
+*    " ------------------------------------------------------------------
+*    result = VALUE #( FOR travel IN lt_travels
+*                      ( %tky   = travel-%tky
+*                        %param = travel ) ).
+
+  ENDMETHOD.
+
+  METHOD approverequest.
+    TYPES: zty_scales TYPE STANDARD TABLE OF /rb4r/mm_rqscl WITH EMPTY KEY,
+           zty_n_ers  TYPE STANDARD TABLE OF /rb4r/mm_n_ers WITH EMPTY KEY.
+    DATA: lt_item1  TYPE /rb4r/mm_tt_item,
+          lt_return TYPE bapiret2_t.
+
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+       ENTITY requestheader
+       FIELDS ( requestnumber )
+       WITH CORRESPONDING #( keys )
+       RESULT DATA(request_read_results)
+*       ENTITY RequestHeader BY \_RequestItem
+       BY \_requestitem
+       ALL FIELDS
+       WITH CORRESPONDING #( keys )
+       RESULT DATA(lt_item)
+       ENTITY requestitem BY \_potext
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_potext)
+       ENTITY requestitem BY \_sourcelist
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_sl)
+       ENTITY requestitem BY \_documentlist
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_doc)
+       ENTITY requestitem BY \_schedulingagreement
+       ALL FIELDS WITH CORRESPONDING #( lt_item )
+       RESULT DATA(lt_mmsa)
+       FAILED failed.
+
+    "Approver Approve request
+    CALL FUNCTION '/RB4R/MM_GMMC_WF_ACTION'
+      STARTING NEW TASK 'WORKFLOW_TRIGGER'
+      EXPORTING
+        iv_request_no         = request_read_results[ 1 ]-requestnumber
+        iv_plant              = request_read_results[ 1 ]-plant
+        iv_request_type       = request_read_results[ 1 ]-requesttype
+        iv_workitemid         = keys[ 1 ]-%param-workitem
+        iv_action_type        = '1' "Approve
+      EXCEPTIONS
+        communication_failure = 1
+        system_failure        = 2
+        OTHERS                = 3.
+
+    INSERT VALUE #( %msg = new_message_with_text( text     = |Request approved|
+                                                  severity = if_abap_behv_message=>severity-success ) )
+           INTO TABLE reported-requestheader.
+
+    result = VALUE #( FOR request_read_result IN request_read_results
+                      ( %tky   = request_read_result-%tky
+                        %param = request_read_result
+
+                      ) ).
+
+  ENDMETHOD.
+
+  METHOD rejectrequest.
+
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+    ENTITY requestheader
+    ALL FIELDS WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_request)
+    FAILED DATA(lt_failed).
+
+* Approver reject request
+    CALL FUNCTION '/RB4R/MM_GMMC_WF_ACTION'
+      STARTING NEW TASK 'WORKFLOW_TRIGGER'
+      EXPORTING
+        iv_request_no         = lt_request[ 1 ]-requestnumber
+        iv_plant              = lt_request[ 1 ]-plant
+        iv_request_type       = lt_request[ 1 ]-requesttype
+        iv_workitemid         = keys[ 1 ]-%param-workitem
+        iv_action_type        = '2' "Reject
+      EXCEPTIONS
+        communication_failure = 1
+        system_failure        = 2
+        OTHERS                = 3.
+
+    INSERT VALUE #( %msg = new_message_with_text( text     = |Request rejected|
+                                                  severity = if_abap_behv_message=>severity-success ) )
+           INTO TABLE reported-requestheader.
+    result = VALUE #( FOR request_read_result IN lt_request
+                      ( %tky   = request_read_result-%tky
+                        %param = request_read_result
+
+                      ) ).
+
+*    ASSERT 1 = 1.
+*
+*    DATA: lt_head_up TYPE TABLE FOR UPDATE /rb4r/mm_i_gmmc_requestheader.
+*
+*    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+*    ENTITY requestheader
+*    ALL FIELDS WITH CORRESPONDING #( keys )
+*    RESULT DATA(lt_rs)
+*    FAILED DATA(lt_failed).
+*
+*    LOOP AT lt_rs ASSIGNING FIELD-SYMBOL(<fs_rs>).
+*      APPEND VALUE #( requestnumber = <fs_rs>-requestnumber status = |request rejected| ) TO lt_head_up.
+*    ENDLOOP.
+*
+*    MODIFY ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+*    ENTITY requestheader
+*    UPDATE FIELDS ( status )
+*    WITH lt_head_up
+*    REPORTED DATA(lt_report)
+*    FAILED DATA(lt_fail).
+*
+*    reported = CORRESPONDING #( DEEP lt_report ).
+*    failed =  CORRESPONDING #( DEEP lt_fail ).
+*
+*    INSERT VALUE #( %msg = new_message_with_text( text     = |Rejected|
+*                                                  severity = if_abap_behv_message=>severity-success ) )
+*           INTO TABLE reported-requestheader.
+*
+*    result = VALUE #( FOR request_read_result IN lt_rs
+*                      ( %tky   = request_read_result-%tky
+*                        %param = request_read_result
+*
+*                      ) ).
+
+  ENDMETHOD.
+
+
+
+  METHOD earlynumbering_create.
+
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~early_numbering_create(
+      EXPORTING
+        it_entities = entities
+      CHANGING
+        ct_mapped   = mapped-requestheader
+        ct_failed   = failed-requestheader
+        ct_reported = reported-requestheader
+    ).
+  ENDMETHOD.
+
+  METHOD earlynumbering_cba_requestitem.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~earlynumbering_cba_requestitem(
+      EXPORTING
+        it_entities = entities
+      CHANGING
+        ct_mapped   = mapped
+        ct_failed   = failed
+        ct_reported = reported
+    ).
+  ENDMETHOD.
+
+  METHOD earlynumbering_cba_comment.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~earlynumbering_cba_comment(
+      EXPORTING
+        it_entities = entities
+      CHANGING
+        ct_mapped   = mapped
+        ct_failed   = failed
+        ct_reported = reported
+    ).
+  ENDMETHOD.
+
+  METHOD validate_fields.
+*    DATA: lv_item TYPE char10.
+*
+*    READ ENTITIES OF /RB4R/MM_I_GMMC_RequestHeader IN LOCAL MODE
+*    ENTITY RequestHeader BY \_RequestItem ALL FIELDS WITH CORRESPONDING #( keys )
+*    RESULT DATA(lt_item)
+*    REPORTED DATA(lt_reported)
+*    FAILED DATA(lt_failed).
+*    LOOP AT lt_item INTO DATA(ls_item).
+*      lv_item = ls_item-RequestItem.
+*      SHIFT lv_item LEFT DELETING LEADING '0'.
+*      CONCATENATE 'Request Item' lv_item INTO DATA(lv_request_item) SEPARATED BY space.
+*      IF ls_item-CreditorNumber IS INITIAL.
+*        failed-requestitem = VALUE #( (  %tky = ls_item-%tky ) ).
+*        reported-requestitem = VALUE #( BASE   reported-requestitem
+*                                        (  %tky = ls_item-%tky
+*                                        %path = VALUE #(
+*                                            requestheader-%is_draft = ls_item-%is_draft
+*                                            requestheader-%key-RequestNumber = ls_item-RequestNumber )
+*
+*                                            %state_area = if_abap_behv=>state_area_all
+*                                            %msg =  new_message_with_text(
+*                                                      severity = if_abap_behv_message=>severity-error
+*                                                      text     =   'Creaditor Number is required.'
+*                                                    )
+*                                           %element-creditornumber = if_abap_behv=>mk-on
+*                                           )
+*
+*
+*         ).
+*
+*      ENDIF.
+*    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD uploaditemsbyexcel.
+*   /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~uploaditemsbyexcel(
+*     EXPORTING
+*         iv_is_draft      = keys[ 1 ]-%is_draft
+*         iv_requestnumber = keys[ 1 ]-requestnumber
+*      CHANGING
+*        ct_reported      = reported
+*     ).
+    IF keys[ 1 ]-%is_draft = '01'.
+
+      MODIFY ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+      ENTITY RequestHeader
+      EXECUTE uploadexceldata
+      FROM CORRESPONDING #( keys ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD validation_excel.
+  ENDMETHOD.
+
+  METHOD submitrequest.
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+    ENTITY requestheader
+    ALL FIELDS WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_request)
+    FAILED DATA(lt_failed).
+
+* Send the parent workitem ID also, if exist -> this request already submitted
+* Now Requestor Resubmit the request
+    CALL FUNCTION '/RB4R/MM_GMMC_WF_ACTION'
+      STARTING NEW TASK 'WORKFLOW_TRIGGER'
+      EXPORTING
+        iv_request_no         = lt_request[ 1 ]-requestnumber
+        iv_plant              = lt_request[ 1 ]-plant
+        iv_request_type       = lt_request[ 1 ]-requesttype
+        iv_workitemid         = lt_request[ 1 ]-workitemid
+        iv_action_type        = '6' "Submit
+      EXCEPTIONS
+        communication_failure = 1
+        system_failure        = 2
+        OTHERS                = 3.
+
+    INSERT VALUE #( %msg = new_message_with_text( text     = |Request submitted|
+                                                  severity = if_abap_behv_message=>severity-success ) )
+           INTO TABLE reported-requestheader.
+    result = VALUE #( FOR request_read_result IN lt_request
+                      ( %tky   = request_read_result-%tky
+                        %param = request_read_result
+
+                      ) ).
+  ENDMETHOD.
+
+  METHOD callbackrequest.
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+    ENTITY requestheader
+    ALL FIELDS WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_request)
+    FAILED DATA(lt_failed).
+
+* Requestor call back = Approver call action call back
+    CALL FUNCTION '/RB4R/MM_GMMC_WF_ACTION'
+      STARTING NEW TASK 'WORKFLOW_TRIGGER'
+      EXPORTING
+        iv_request_no         = lt_request[ 1 ]-requestnumber
+        iv_plant              = lt_request[ 1 ]-plant
+        iv_request_type       = lt_request[ 1 ]-requesttype
+        iv_workitemid         = lt_request[ 1 ]-workitemid
+        iv_action_type        = '4' "Call back
+      EXCEPTIONS
+        communication_failure = 1
+        system_failure        = 2
+        OTHERS                = 3.
+
+    INSERT VALUE #( %msg = new_message_with_text( text     = |Request called back|
+                                                  severity = if_abap_behv_message=>severity-success ) )
+           INTO TABLE reported-requestheader.
+    result = VALUE #( FOR request_read_result IN lt_request
+                      ( %tky   = request_read_result-%tky
+                        %param = request_read_result
+
+                      ) ).
+  ENDMETHOD.
+
+  METHOD forwardrequest.
+
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+    ENTITY requestheader
+    ALL FIELDS WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_request)
+    FAILED DATA(lt_failed).
+
+* Requestor call back = Approver call action call back
+    CALL FUNCTION '/RB4R/MM_GMMC_WF_ACTION'
+      STARTING NEW TASK 'WORKFLOW_TRIGGER'
+      EXPORTING
+        iv_request_no         = lt_request[ 1 ]-requestnumber
+        iv_plant              = lt_request[ 1 ]-plant
+        iv_request_type       = lt_request[ 1 ]-requesttype
+        iv_workitemid         = keys[ 1 ]-%param-workitem
+        iv_fw_from_user       = sy-uname
+        iv_fw_to_user         = keys[ 1 ]-%param-userid
+        iv_action_type        = '3' "Forward
+      EXCEPTIONS
+        communication_failure = 1
+        system_failure        = 2
+        OTHERS                = 3.
+
+    INSERT VALUE #( %msg = new_message_with_text( text     = |Request forwarded|
+                                                  severity = if_abap_behv_message=>severity-success ) )
+           INTO TABLE reported-requestheader.
+    result = VALUE #( FOR request_read_result IN lt_request
+                      ( %tky   = request_read_result-%tky
+                        %param = request_read_result
+
+                      ) ).
+  ENDMETHOD.
+
+  METHOD sendbackrequest.
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+    ENTITY requestheader
+    ALL FIELDS WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_request)
+    FAILED DATA(lt_failed).
+
+* Requestor call back = Approver call action call back
+    CALL FUNCTION '/RB4R/MM_GMMC_WF_ACTION'
+      STARTING NEW TASK 'WORKFLOW_TRIGGER'
+      EXPORTING
+        iv_request_no         = lt_request[ 1 ]-requestnumber
+        iv_plant              = lt_request[ 1 ]-plant
+        iv_request_type       = lt_request[ 1 ]-requesttype
+        iv_workitemid         = keys[ 1 ]-%param-workitem
+        iv_sb_to_user         = keys[ 1 ]-%param-userid
+        iv_action_type        = '8' "Send back
+      EXCEPTIONS
+        communication_failure = 1
+        system_failure        = 2
+        OTHERS                = 3.
+
+    INSERT VALUE #( %msg = new_message_with_text( text     = |Request sent back|
+                                                  severity = if_abap_behv_message=>severity-success ) )
+           INTO TABLE reported-requestheader.
+    result = VALUE #( FOR request_read_result IN lt_request
+                      ( %tky   = request_read_result-%tky
+                        %param = request_read_result
+
+                      ) ).
+  ENDMETHOD.
+
+  METHOD task_finished.
+    RECEIVE RESULTS FROM FUNCTION '/RB4R/MM_GMMC_API'
+        TABLES pt_return = gt_return.
+    md_finished = abap_true.
+  ENDMETHOD.
+
+  METHOD sendbackall.
+    " ------------------------------------------------------------------
+    " 1. Read the associated RequestItem.
+    " ------------------------------------------------------------------
+    "Read Request Item Entity
+    READ ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+    ENTITY requestheader BY \_requestitem
+    ALL FIELDS
+    WITH CORRESPONDING #( keys )
+    RESULT DATA(lt_item)
+    REPORTED DATA(lt_reported)
+    FAILED DATA(lt_failed).
+
+    " ------------------------------------------------------------------
+    " 2. Prepare the data for modification using EML.
+    " ------------------------------------------------------------------
+    IF lt_item IS NOT INITIAL.
+      DATA lt_requestitem_update TYPE TABLE FOR UPDATE /rb4r/mm_i_gmmc_requestitem.
+
+      lt_requestitem_update = VALUE #( FOR item IN lt_item ( %tky                = item-%tky
+                                                             issendback          = 'X'   "Set sendback flag
+                                                             %control-issendback = if_abap_behv=>mk-on ) ).
+
+*        LOOP AT lt_item INTO DATA(ls_item).
+*          APPEND VALUE #(
+*            %tky = ls_item-%tky
+*            issendback = abap_true
+*            %control-issendback = if_abap_behv=>mk-on
+*          ) TO lt_requestitem_update.
+*        ENDLOOP.
+
+    ENDIF.
+
+    " ------------------------------------------------------------------
+    " 3. Execute the modification using a single EML statement.
+    " ------------------------------------------------------------------
+    "Modify entity
+    MODIFY ENTITIES OF /rb4r/mm_i_gmmc_requestheader IN LOCAL MODE
+      ENTITY requestitem
+      UPDATE FIELDS ( issendback )
+        WITH lt_requestitem_update
+        MAPPED DATA(ls_mapped)
+      FAILED DATA(ls_failed)
+      REPORTED DATA(ls_reported).
+
+*     " ------------------------------------------------------------------
+*    " 4. Set the result for the action.
+*    " The framework will use this to refresh the UI.
+*    " ------------------------------------------------------------------
+*    result = VALUE #( FOR request_read_result IN lt_requestitem_update
+*                      ( %tky   = request_read_result-%tky
+*                        %param = request_read_result
+*                      ) ).
+*    result = VALUE #( ( %tky = lt_requestitem_update[ 1 ]-%tky ) ).
+
+  ENDMETHOD.
+
+  METHOD uploadExcelData.
+    DATA: lt_reported TYPE RESPONSE FOR REPORTED LATE /rb4r/mm_i_gmmc_requestheader.
+
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~uploaditemsbyexcel(
+     EXPORTING
+         iv_is_draft      = keys[ 1 ]-%is_draft
+         iv_requestnumber = keys[ 1 ]-requestnumber
+      CHANGING
+        ct_reported      = lt_reported
+     ).
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS lsc_mm_i_gmmc_requestheader DEFINITION INHERITING FROM cl_abap_behavior_saver.
+  PROTECTED SECTION.
+
+    METHODS finalize REDEFINITION.
+
+    METHODS check_before_save REDEFINITION.
+
+    METHODS adjust_numbers REDEFINITION.
+
+    METHODS save REDEFINITION.
+
+    METHODS cleanup REDEFINITION.
+
+    METHODS cleanup_finalize REDEFINITION.
+
+ENDCLASS.
+
+CLASS lsc_mm_i_gmmc_requestheader IMPLEMENTATION.
+
+  METHOD finalize.
+  ENDMETHOD.
+
+  METHOD check_before_save.
+*    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~check_before_save(
+*      CHANGING
+*        ct_reported = reported
+*        ct_failed   = failed
+*    ).
+  ENDMETHOD.
+
+  METHOD adjust_numbers.
+
+  ENDMETHOD.
+
+  METHOD save.
+    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~save(
+      CHANGING
+        ct_response = reported
+    ).
+
+*    /rb4r/cl_mm_gmmc_reqhead=>get_instance(  )->/rb4r/if_mm_gmmc_reqhead~additional_save(
+*    ).
+
+  ENDMETHOD.
+
+  METHOD cleanup.
+  ENDMETHOD.
+
+  METHOD cleanup_finalize.
+  ENDMETHOD.
+
+ENDCLASS.
