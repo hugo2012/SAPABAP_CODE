@@ -1,0 +1,11 @@
+1. Enter the command “git init” to initialize an empty Git repository.
+2. Enter command “git add .” to add all local files to the local Git repository
+3. Enter the following command to commit your local files to the local Git repository. 
+At this point however, the files are not added to your Git repository on the internet because these files are locally committed.
+“git commit -m "first commit"
+
+4. Now to create a remote setup, copy the below URL from GitHub:
+“git remote add origin https://github.com/……../mybasproject.git”
+5. Enter the “git push” command to move all the locally committed files to the GitHub repository.
+6. You can clone an existing repository using the following command:
+“git clone https://github.com/………../mybasproject.git“
