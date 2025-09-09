@@ -7,5 +7,6 @@ At this point however, the files are not added to your Git repository on the int
 4. Now to create a remote setup, copy the below URL from GitHub:
 “git remote add origin https://github.com/……../mybasproject.git”
 5. Enter the “git push” command to move all the locally committed files to the GitHub repository.
+git push --set-upstream origin main
 6. You can clone an existing repository using the following command:
 “git clone https://github.com/………../mybasproject.git“
