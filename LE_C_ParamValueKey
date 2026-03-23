@@ -1,0 +1,71 @@
+@EndUserText.label: 'CP: Param Value Key for Search'
+@AccessControl.authorizationCheck: #CHECK
+@VDM.viewType: #CONSUMPTION
+define root view entity /RB1M/LE_C_ParamValueKey
+  as projection on /RB1M/LE_I_ParamValueKey
+{
+          @Consumption.valueHelpDefinition: [{entity:{name:'/RB4R/SD_I_CSP', element: 'CustomerShippingProfile'} } ]
+  key     CustShippingProfile,
+          @Consumption.valueHelpDefinition: [{entity:{name:'I_SHIPPINGPOINTVH', element: 'ShippingPoint'} } ]
+  key     ShippingPoint,
+          @Consumption.valueHelpDefinition: [{entity:{name:'I_CUSTOMER_VH', element: 'Customer'} }]
+  key     ShipToParty,
+          @Consumption.valueHelpDefinition: [{entity:{name:'/RB1M/LE_A_GROUPDEF', element: 'GroupID'} }]
+          @EndUserText.label: 'Access Sequence'
+          GroupID,
+          //Additional filter from child entity
+          @ObjectModel.virtualElement
+          @Consumption.valueHelpDefinition: [{entity:{name:'/RB1M/LE_I_USAGEAREA', element: 'AreaOfUsage'} }]
+          @ObjectModel.filter.transformedBy: 'ABAP:/RB1M/CL_LE_CP_VE_FILTER'
+          @EndUserText.label: 'Area of Usage'
+  virtual AreaOfUsage :/rb1m/le_cp_area_usg,
+          @ObjectModel.virtualElement
+          @Consumption.valueHelpDefinition: [{entity:{name:'/RB1M/LE_I_QUALIFIER', element: 'QualifierID'},
+                                              additionalBinding: [{element: 'AreaOfUsage', localElement: 'AreaOfUsage', usage: #FILTER }]  }]
+          @ObjectModel.filter.transformedBy: 'ABAP:/RB1M/CL_LE_CP_VE_FILTER'
+          @EndUserText.label: 'Parameter'
+  virtual QualifierID :/rb1m/le_qualifier,
+          @ObjectModel.virtualElement
+          @ObjectModel.filter.transformedBy: 'ABAP:/RB1M/CL_LE_CP_VE_FILTER'
+          @EndUserText.label: 'Parameter Value'
+  virtual QualValue   :/rb1m/le_qual_value,
+
+          /* Associations */
+          _Group,
+          _ParamValue : redirected to composition child /RB1M/LE_C_ParamValue
+}
+/*///////////////////////////////////////////*/
+/* ABAP:/RB1M/CL_LE_CP_VE_FILTER */
+CLASS /rb1m/cl_le_cp_ve_filter DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+    INTERFACES if_sadl_exit .
+    INTERFACES if_sadl_exit_filter_transform .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_LE_CP_VE_FILTER IMPLEMENTATION.
+
+
+  METHOD if_sadl_exit_filter_transform~map_atom.
+    "Map element to the associated field and apply operator
+    CASE iv_element.
+      WHEN 'AREAOFUSAGE'.
+        DATA(lo_element) = cl_sadl_cond_prov_factory_pub=>create_simple_cond_factory( )->element( '_PARAMVALUE.AREAOFUSAGE' ).
+        ro_condition = lo_element->equals( iv_value ).
+      WHEN 'QUALIFIERID'.
+        lo_element = cl_sadl_cond_prov_factory_pub=>create_simple_cond_factory( )->element( '_PARAMVALUE.QUALIFIERID' ).
+        ro_condition = lo_element->equals( iv_value ).
+      WHEN 'QUALVALUE'.
+        lo_element = cl_sadl_cond_prov_factory_pub=>create_simple_cond_factory( )->element( '_PARAMVALUE.QUALVALUE' ).
+        ro_condition = lo_element->covers_pattern( iv_value ).
+    ENDCASE.
+  ENDMETHOD.
+ENDCLASS.
+
