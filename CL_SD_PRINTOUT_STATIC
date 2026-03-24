@@ -1,0 +1,164 @@
+class /RB1M/CL_SD_PRINTOUT_STATIC definition
+  public
+  final
+  create private .
+
+public section.
+
+  class-methods GET_INSTANCE
+    returning
+      value(RO_INST) type ref to /RB1M/CL_SD_PRINTOUT_STATIC .
+  methods SET_FPFORMOUTPUT
+    importing
+      value(IS_FPFORMOUTPUT) type FPFORMOUTPUT .
+  methods GET_FPFORMOUTPUT
+    returning
+      value(ES_FPFORMOUTPUT) type FPFORMOUTPUT .
+  methods SET_KEY_DATA
+    importing
+      value(IS_KEY) type /RB1M/SD_I_OUTPUT .
+  methods GET_KEY_DATA
+    returning
+      value(ES_KEY_DATA) type /RB1M/SD_I_OUTPUT .
+  methods CLEAR_KEY_DATA .
+  methods CLEAR_INSTANCE .
+protected section.
+private section.
+
+  class-data MO_INST type ref to /RB1M/CL_SD_PRINTOUT_STATIC .
+  data MS_FPFORMOUTPUT type FPFORMOUTPUT .
+  class-data MV_ACTIVE type BOOLE_D .
+  data MS_KEY_OBJ type /RB1M/SD_I_OUTPUT .
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_PRINTOUT_STATIC IMPLEMENTATION.
+
+
+  METHOD clear_instance.
+    IF mo_inst IS BOUND.
+      CLEAR  mo_inst.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD clear_key_data.
+    IF ms_key_obj IS NOT INITIAL.
+      CLEAR ms_key_obj.
+    ENDIF.
+    IF ms_fpformoutput-pdf IS NOT INITIAL.
+      CLEAR ms_fpformoutput.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_fpformoutput.
+    es_fpformoutput = ms_fpformoutput.
+  ENDMETHOD.
+
+
+  METHOD get_instance.
+* init
+    CLEAR ro_inst.
+* Create isntance
+    IF mo_inst IS NOT BOUND.
+      CREATE OBJECT mo_inst.
+    ENDIF.
+    ro_inst = mo_inst.
+
+  ENDMETHOD.  "get_instance
+
+
+  METHOD get_key_data.
+    es_key_data = ms_key_obj.
+  ENDMETHOD.
+
+
+  METHOD set_fpformoutput.
+    ms_fpformoutput = is_fpformoutput.
+  ENDMETHOD.
+
+
+  method SET_KEY_DATA.
+    ms_key_obj = is_key.
+  endmethod.
+ENDCLASS.
+
+/////
+
+class /RB1M/CL_SD_PRT_INV_PDF2MAIL definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces IF_BADI_INTERFACE .
+  interfaces /RB4R/SD_IF_PRT_INV_PDF2MAIL .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_PRT_INV_PDF2MAIL IMPLEMENTATION.
+
+
+  METHOD /rb4r/sd_if_prt_inv_pdf2mail~change_output_parameters.
+**<<< Handle for Data2mail
+    DATA lo_sd_printout_static TYPE REF TO /rb1m/cl_sd_printout_static.
+    DATA: ls_output TYPE /rb1m/sd_i_output.
+    lo_sd_printout_static = /rb1m/cl_sd_printout_static=>get_instance( ).
+    lo_sd_printout_static->get_key_data(
+      RECEIVING
+        es_key_data =    ls_output
+    ).
+    IF ls_output is NOT INITIAL.
+      cs_outputparams-nopreview = abap_true.
+      cs_outputparams-nodialog = abap_true.
+      cs_outputparams-getpdf = 'X'.
+    ENDIF.
+*>>>>>> Handle for Data2mail
+  ENDMETHOD.
+
+
+  METHOD /rb4r/sd_if_prt_inv_pdf2mail~export_pdf.
+
+   DATA lo_sd_printout_static TYPE REF TO /rb1m/cl_sd_printout_static.
+   lo_sd_printout_static = /rb1m/cl_sd_printout_static=>get_instance( ).
+**<<< Handle for Data2mail
+    " export pdf to class attribute
+    IF is_form_output IS NOT INITIAL.
+
+      CALL METHOD lo_sd_printout_static->set_fpformoutput
+        EXPORTING
+          is_fpformoutput = is_form_output.              " Form Output (PDF, PDL)
+    ENDIF.
+
+*>>>>>> Handle for Data2mail
+  ENDMETHOD.
+
+
+  METHOD /rb4r/sd_if_prt_inv_pdf2mail~fill_message_details.
+**<<< Handle for Data2mail
+    DATA lo_sd_printout_static TYPE REF TO /rb1m/cl_sd_printout_static.
+    DATA: ls_output TYPE /rb1m/sd_i_output.
+    lo_sd_printout_static = /rb1m/cl_sd_printout_static=>get_instance( ).
+    lo_sd_printout_static->get_key_data(
+      RECEIVING
+        es_key_data =    ls_output
+    ).
+    IF ls_output IS NOT INITIAL.
+      cs_nast-objky     = ls_output-document.
+      cs_nast-kappl     = ls_output-application.
+      cs_nast-spras     = ls_output-language.
+      cs_nast-kschl     = ls_output-outputtype.
+      cs_nast-parnr     = ls_output-Parner.
+      cs_nast-parvw     = ls_output-PartnerFunction.
+      cs_tnapr-sform    = ls_output-PDFFormName.
+      cs_tnapr-formtype = ls_output-formtype.
+    ENDIF.
+*>>>>>> Handle for Data2mail
+  ENDMETHOD.
+ENDCLASS.
