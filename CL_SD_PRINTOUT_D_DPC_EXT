@@ -1,0 +1,1119 @@
+class /RB1M/CL_SD_PRINTOUT_D_DPC_EXT definition
+  public
+  inheriting from /RB1M/CL_SD_PRINTOUT_D_DPC
+  create public .
+
+public section.
+
+  methods /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY
+    redefinition .
+protected section.
+
+  methods COMMONFIELDSSET_GET_ENTITYSET
+    redefinition .
+  methods CONSIGNMENTORDER_GET_ENTITYSET
+    redefinition .
+  methods EMAILSET_GET_ENTITYSET
+    redefinition .
+  methods FREIGHTORDERSET_GET_ENTITYSET
+    redefinition .
+  methods LANGUAGESET_GET_ENTITYSET
+    redefinition .
+  methods OUTPUTSET_GET_ENTITYSET
+    redefinition .
+  methods TEXTSET_GET_ENTITYSET
+    redefinition .
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_PRINTOUT_D_DPC_EXT IMPLEMENTATION.
+
+
+  METHOD consignmentorder_get_entityset.
+    TRY.
+
+        CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_shipping_data
+          EXPORTING
+            iv_co             = 'X'
+            it_select_options = it_filter_select_options
+          IMPORTING
+            et_freightorder   = DATA(lt_freightorder).
+
+        CHECK lt_freightorder IS NOT INITIAL.
+        SORT lt_freightorder ASCENDING BY freightorderdocument codocument carrier .
+        DELETE ADJACENT DUPLICATES FROM lt_freightorder COMPARING freightorderdocument codocument carrier.
+
+** $inlinecount query option for all count entries.
+        IF io_tech_request_context->has_inlinecount( ) = abap_true.
+            DESCRIBE TABLE lt_freightorder LINES es_response_context-inlinecount.
+             es_response_context-inlinecount =  es_response_context-inlinecount .
+            ELSE.
+            CLEAR es_response_context-inlinecount.
+        ENDIF.
+*- For paging i.e. $top and $skip
+        /iwbep/cl_mgw_data_util=>paging(
+                                    EXPORTING   is_paging = is_paging
+                                    CHANGING    ct_data   = lt_freightorder
+                                       ).
+
+        et_entityset = VALUE #( BASE et_entityset FOR ls_fo IN lt_freightorder
+                                 ( codocument = ls_fo-codocument
+                                   freightorderdocument = ls_fo-freightorderdocument
+                                   freightorderunit = ls_fo-freightorderunit
+                                   deliverydocument = ls_fo-deliverydocument
+                                   shiptoparty      = ls_fo-shiptoparty
+                                   date             = ls_fo-date
+                                   carrier          = ls_fo-carrier
+                                   createdby        = ls_fo-createdby
+                                  ) ).
+
+
+      CATCH /iwbep/cx_mgw_busi_exception.
+      CATCH /iwbep/cx_mgw_tech_exception.
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD languageset_get_entityset.
+    DATA: lv_langu_out TYPE char2.
+    DATA : lv_text TYPE tdobname.
+    DATA : lt_lagu_so10 TYPE /rb1m/cl_sd_printout_d_mpc=>tt_language.
+
+    TRY.
+
+*       Get Text for body of email.
+*        lv_text = '/RB1M/SD_PRINTOUT_EMAIL'.
+        LOOP AT it_filter_select_options INTO DATA(ls_filter) .
+          IF ls_filter-property = 'TextID'.
+            lv_text = VALUE #( ls_filter-select_options[ 1 ]-low OPTIONAL ).
+          ENDIF.
+        ENDLOOP.
+
+        IF lv_text is INITIAL.
+           lv_text = '/RB1M/SD_PRINTOUT_EMAIL'.
+        ENDIF.
+
+        SELECT *
+          FROM /rb1m/sd_i_language
+         WHERE sptxt IS NOT INITIAL
+         AND  spras EQ @sy-langu
+        INTO TABLE @DATA(lt_language).
+        IF sy-subrc IS INITIAL.
+
+          et_entityset = CORRESPONDING #( lt_language ).
+
+          CALL FUNCTION 'CONVERSION_EXIT_ISOLA_OUTPUT'
+            EXPORTING
+              input  = sy-langu
+            IMPORTING
+              output = lv_langu_out.
+
+          et_entityset[ spras = sy-langu ]-loaddefault = lv_langu_out.
+
+        ENDIF.
+        CLEAR lt_language.
+        IF lv_text IS NOT INITIAL.
+          SELECT a~*
+          FROM /rb1m/sd_i_language AS a
+           LEFT OUTER JOIN /rb1m/sd_i_text_header AS b
+           ON a~spras = b~tdspras
+           WHERE sptxt IS NOT INITIAL
+            AND  tdname = @lv_text
+            AND a~spras NE @sy-langu
+          INTO TABLE @lt_language.
+          IF sy-subrc IS INITIAL.
+            lt_lagu_so10 = CORRESPONDING #( lt_language ).
+            APPEND LINES OF  lt_lagu_so10 TO et_entityset.
+          ENDIF.
+        ENDIF.
+
+      CATCH /iwbep/cx_mgw_busi_exception.
+      CATCH /iwbep/cx_mgw_tech_exception.
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_deep_entity.
+
+    DATA : lt_deep_entityset TYPE TABLE OF /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~ts_return_data2mail,
+           ls_deep           LIKE LINE OF lt_deep_entityset.
+    DATA : ls_return TYPE /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~ts_return_data2mail.
+    DATA : lo_message_container TYPE REF TO /iwbep/if_message_container.
+    DATA : ls_temp TYPE /rb1m/cl_sd_printout_d_mpc_ext=>ts_output.
+    DATA : ls_output TYPE /rb1m/sd_i_output.
+    DATA : lv_va_jobname  TYPE tbtco-jobname,
+           lv_vn_jobcount TYPE tbtco-jobcount.
+    DATA : lv_spras TYPE spras.
+    TYPES: lty_r_codoc      TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc=>ts_consignmentorder-codocument,
+           lty_r_output     TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc=>ts_output-messagetype,
+           lty_r_mail       TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc=>ts_email-emailid,
+           lty_r_actiontype TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc=>ts_output-actiontype.
+    DATA : lr_codoc      TYPE lty_r_codoc,
+           lr_fodoc      TYPE lty_r_codoc,
+           lr_output     TYPE lty_r_output,
+           lr_mailid     TYPE lty_r_mail,
+           lr_actiontype TYPE lty_r_actiontype.
+
+    CASE iv_entity_set_name.
+      WHEN 'Data2MailRootSet'.
+
+        TRY.
+            " Return structure as a deep structure
+            io_data_provider->read_entry_data(
+              IMPORTING
+                es_data = ls_return
+            ).
+
+*<<<     Write logic here to process for submit program
+
+
+            CHECK ls_return IS NOT INITIAL.
+            IF ls_return-root2fonav IS NOT INITIAL.
+              " The FO Documents
+              lr_fodoc =  VALUE #(   FOR ls_fo2fonav IN ls_return-root2fonav
+                                     ( sign = 'I'
+                                       option = 'EQ'
+                                       low = ls_fo2fonav-freightorderdocument
+                                      )
+                                   ).
+              SORT lr_fodoc BY low.
+              DELETE ADJACENT DUPLICATES FROM lr_fodoc COMPARING low.
+            ENDIF.
+
+*          Language for Email Title Translation...
+            IF ls_return-language IS NOT INITIAL.
+              CLEAR lv_spras.
+              CALL FUNCTION 'CONVERSION_EXIT_ISOLA_INPUT'
+                EXPORTING
+                  input            = ls_return-language
+                IMPORTING
+                  output           = lv_spras
+                EXCEPTIONS
+                  unknown_language = 1
+                  OTHERS           = 2.
+              IF sy-subrc <> 0.
+* Implement suitable error handling here
+              ENDIF.
+
+            ENDIF.
+            IF ls_return-root2conav IS NOT INITIAL.
+              " CO Documents
+              lr_codoc =  VALUE #( FOR ls_fo2conav IN ls_return-root2conav
+                                   ( sign = 'I'
+                                     option = 'EQ'
+                                     low = ls_fo2conav-codocument
+                                    )
+                                 ).
+              SORT lr_codoc BY low.
+              DELETE ADJACENT DUPLICATES FROM lr_codoc COMPARING low.
+
+            ENDIF.
+
+            IF ls_return-root2outputnav IS NOT INITIAL.
+              " Message Type
+              lr_output =   VALUE #( FOR ls_fo2output IN ls_return-root2outputnav
+                                    WHERE ( application NE 'CO' )
+                                    ( sign = 'I'
+                                     option = 'EQ'
+                                     low = ls_fo2output-messagetype
+                                    )
+                                 ).
+
+
+              " Action Type
+              lr_actiontype  = VALUE #( FOR ls_fo2output IN ls_return-root2outputnav
+                                        WHERE ( application EQ 'CO' )
+                                          ( sign = 'I'
+                                            option = 'EQ'
+                                            low = ls_fo2output-actiontype
+                                           )
+                                ).
+
+            ENDIF.
+            " Special case to add output Type from R3 applied for Direct Invoice
+            IF ls_return-directinvoice = abap_true.
+              APPEND VALUE #( sign = 'I' option = 'EQ' low = 'YO36' high = '')
+                      TO lr_output .
+            ENDIF.
+            " Text of Email Body
+            DATA(lv_mailtext) = VALUE #(  ls_return-root2textnav[ 1 ]-textvalue OPTIONAL ).
+
+            lr_mailid  = VALUE #( FOR ls_fo2mail IN ls_return-root2emailnav
+                                ( sign = 'I'
+                                  option = 'EQ'
+                                  low = ls_fo2mail-emailid
+                                 )
+                              ).
+            SPLIT ls_return-processstatus AT '|' INTO DATA(lv_sta_green) DATA(lv_sta_yellow).
+            IF lv_sta_green IS NOT INITIAL.
+              DATA(lv_processstatus_green) = 'X'.
+            ENDIF.
+            IF lv_sta_yellow IS NOT INITIAL.
+              DATA(lv_processstatus_yellow) = 'X'.
+            ENDIF.
+
+            DATA(lv_mode_run) = 1.   "for testing purpose
+            "BREAK-POINT.
+            IF lv_mode_run = 0. "run forceground
+              SUBMIT /rb1m/sd_sh_printout_data2mail
+                WITH s_fo     IN lr_fodoc
+                WITH s_co     IN lr_codoc
+                WITH s_out_p  IN lr_output
+                WITH s_act_p  IN lr_actiontype
+                WITH p_excel  EQ ls_return-excelexport
+                WITH p_inv    EQ ls_return-directinvoice
+                WITH p_mlbinv EQ ls_return-mlbinvoice
+                WITH p_proinv EQ ls_return-proformadirectinvoice
+                WITH p_pminv  EQ ls_return-proformamlbinvoice
+                WITH p_prcsg  EQ lv_processstatus_green
+                WITH p_prcsy  EQ lv_processstatus_yellow
+                WITH p_langu  EQ lv_spras
+                WITH p_merge  EQ ls_return-mergeoption
+                WITH p_text   EQ lv_mailtext
+                WITH s_mail   IN lr_mailid
+                AND RETURN.
+            ELSE.
+              " call submit report program to perform send mail through batchground job
+              "* Open job
+              lv_va_jobname = 'YF2M_DATA2MAIL' && sy-datum && sy-uzeit.
+              CALL FUNCTION 'JOB_OPEN'
+                EXPORTING
+                  jobname          = lv_va_jobname
+                IMPORTING
+                  jobcount         = lv_vn_jobcount
+                EXCEPTIONS
+                  cant_create_job  = 1
+                  invalid_job_data = 2
+                  jobname_missing  = 3
+                  OTHERS           = 4.
+
+              CHECK sy-subrc IS INITIAL.
+
+              SUBMIT /rb1m/sd_sh_printout_data2mail USER sy-uname
+                  VIA JOB lv_va_jobname NUMBER lv_vn_jobcount
+                  WITH s_fo     IN lr_fodoc
+                  WITH s_co     IN lr_codoc
+                  WITH s_out_p  IN lr_output
+                  WITH s_act_p  IN lr_actiontype
+                  WITH p_excel  EQ ls_return-excelexport
+                  WITH p_inv    EQ ls_return-directinvoice
+                  WITH p_mlbinv EQ ls_return-mlbinvoice
+                  WITH p_proinv EQ ls_return-proformadirectinvoice
+                  WITH p_pminv  EQ ls_return-proformamlbinvoice
+                  WITH p_prcsg  EQ lv_processstatus_green
+                  WITH p_prcsy  EQ lv_processstatus_yellow
+                  WITH p_merge  EQ ls_return-mergeoption
+                  WITH p_text   EQ lv_mailtext
+                  WITH s_mail   IN lr_mailid
+                  AND RETURN.
+              IF sy-subrc IS INITIAL.
+                "* Close job
+                CALL FUNCTION 'JOB_CLOSE'
+                  EXPORTING
+                    jobcount             = lv_vn_jobcount
+                    jobname              = lv_va_jobname
+                    strtimmed            = 'X'  " start immediatly
+                  EXCEPTIONS
+                    cant_start_immediate = 1
+                    invalid_startdate    = 2
+                    jobname_missing      = 3
+                    job_close_failed     = 4
+                    job_nosteps          = 5
+                    job_notex            = 6
+                    lock_failed          = 7
+                    OTHERS               = 8.
+              ENDIF.
+            ENDIF.
+*>>>
+            IF sy-subrc IS INITIAL.
+              " Run submit and get respone.
+              " if OK response Result = "Success"
+              "Sending a success/information message - to the response header
+              lo_message_container = me->mo_context->get_message_container( ).
+              " Fill the message container
+              lo_message_container->add_message_text_only(
+                EXPORTING
+                  iv_msg_type               = 'S'
+                  iv_msg_text               = 'Created successfully batch job with name' && | : | && lv_va_jobname
+                  iv_add_to_response_header = abap_true
+              ).
+              " else  Result = "Error"
+            ELSE.
+              lo_message_container = me->mo_context->get_message_container( ).
+              lo_message_container->add_message_text_only(
+                 EXPORTING
+                   iv_msg_type               = 'E'
+                   iv_msg_text               = '400 - Error - '
+                   iv_add_to_response_header = abap_true
+               ).
+            ENDIF.
+
+            CALL METHOD copy_data_to_ref
+              EXPORTING
+                is_data = ls_return
+              CHANGING
+                cr_data = er_deep_entity.
+
+          CATCH /iwbep/cx_mgw_busi_exception.
+          CATCH /iwbep/cx_mgw_tech_exception.
+        ENDTRY.
+    ENDCASE.
+  ENDMETHOD.
+
+
+  METHOD freightorderset_get_entityset.
+
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_shipping_data
+      EXPORTING
+        iv_fo             = 'X'
+        it_select_options = it_filter_select_options
+      IMPORTING
+        et_freightorder   = DATA(lt_freightorder).
+
+    CHECK lt_freightorder IS NOT INITIAL.
+    SORT lt_freightorder ASCENDING BY freightorderdocument carrier.
+    DELETE ADJACENT DUPLICATES FROM lt_freightorder COMPARING freightorderdocument carrier.
+
+** $inlinecount query option for all count entries.
+    IF io_tech_request_context->has_inlinecount( ) = abap_true.
+      DESCRIBE TABLE lt_freightorder LINES es_response_context-inlinecount.
+      es_response_context-inlinecount =  es_response_context-inlinecount .
+    ELSE.
+      CLEAR es_response_context-inlinecount.
+    ENDIF.
+*- For paging i.e. $top and $skip
+    /iwbep/cl_mgw_data_util=>paging(
+                                EXPORTING   is_paging = is_paging
+                                CHANGING    ct_data   = lt_freightorder
+                                   ).
+
+    et_entityset = VALUE #( BASE et_entityset FOR ls_fo IN lt_freightorder
+                             ( freightorderdocument = ls_fo-freightorderdocument
+                               freightorderunit = ls_fo-freightorderunit
+                               codocument       = ls_fo-codocument
+                               deliverydocument = ls_fo-deliverydocument
+                               shiptoparty      = ls_fo-shiptoparty
+                               date             = ls_fo-date
+                               carrier          = ls_fo-carrier
+                               createdby        = ls_fo-createdby
+                              ) ).
+
+  ENDMETHOD.
+
+
+  METHOD commonfieldsset_get_entityset.
+    DATA : lr_fodoc   TYPE /rb1m/if_sd_printout_dataprovd=>tr_doc.
+    DATA : ls_common TYPE /rb1m/cl_sd_printout_d_mpc_ext=>ts_commonfields,
+           lt_common TYPE /rb1m/cl_sd_printout_d_mpc_ext=>tt_commonfields,
+           lt_tmp    TYPE STANDARD TABLE OF /scwm/t300t.
+    DATA: lr_lgnum   TYPE RANGE OF /scwm/lgnum,
+          lr_shipto  TYPE RANGE OF kunnr,
+          lr_carrier TYPE RANGE OF bu_partner.
+    DATA: lr_field1 TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc_ext=>ts_commonfields-field1,
+          lr_field2 TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc_ext=>ts_commonfields-field2,
+          lr_field3 TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc_ext=>ts_commonfields-field3,
+          lr_field4 TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc_ext=>ts_commonfields-field4,
+          lr_field5 TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc_ext=>ts_commonfields-field5,
+          lr_field6 TYPE RANGE OF /rb1m/cl_sd_printout_d_mpc_ext=>ts_commonfields-field6.
+    FIELD-SYMBOLS : <fs_common> TYPE any.
+
+    LOOP AT it_filter_select_options INTO DATA(ls_return).
+      CASE ls_return-property.
+        WHEN 'Field1'.
+          lr_field1 = CORRESPONDING #(  ls_return-select_options[] ).
+          LOOP AT lr_field1 ASSIGNING FIELD-SYMBOL(<fs_field1>).
+            IF <fs_field1>-low is NOT INITIAL.
+              TRANSLATE <fs_field1>-low TO UPPER CASE.
+            ENDIF.
+             IF <fs_field1>-high is NOT INITIAL.
+              TRANSLATE <fs_field1>-high TO UPPER CASE.
+            ENDIF.
+          ENDLOOP.
+        WHEN 'Field2'.
+          lr_field2 = CORRESPONDING #( ls_return-select_options[] ).
+          LOOP AT lr_field2 ASSIGNING FIELD-SYMBOL(<fs_field2>).
+            IF <fs_field2>-low is NOT INITIAL.
+              TRANSLATE <fs_field2>-low TO UPPER CASE.
+            ENDIF.
+             IF <fs_field2>-high is NOT INITIAL.
+              TRANSLATE <fs_field2>-high TO UPPER CASE.
+            ENDIF.
+          ENDLOOP.
+        WHEN 'Field3'.
+          lr_field3 = CORRESPONDING #( ls_return-select_options[] ).
+           LOOP AT lr_field3 ASSIGNING FIELD-SYMBOL(<fs_field3>).
+            IF <fs_field3>-low is NOT INITIAL.
+              TRANSLATE <fs_field3>-low TO UPPER CASE.
+            ENDIF.
+             IF <fs_field3>-high is NOT INITIAL.
+              TRANSLATE <fs_field3>-high TO UPPER CASE.
+            ENDIF.
+          ENDLOOP.
+        WHEN 'Field4'.
+          lr_field4 = CORRESPONDING #( ls_return-select_options[] ).
+           LOOP AT lr_field4 ASSIGNING FIELD-SYMBOL(<fs_field4>).
+            IF <fs_field4>-low is NOT INITIAL.
+              TRANSLATE <fs_field4>-low TO UPPER CASE.
+            ENDIF.
+             IF <fs_field4>-high is NOT INITIAL.
+              TRANSLATE <fs_field4>-high TO UPPER CASE.
+            ENDIF.
+          ENDLOOP.
+        WHEN 'Field5'.
+          lr_field5 = CORRESPONDING #( ls_return-select_options[] ).
+           LOOP AT lr_field5 ASSIGNING FIELD-SYMBOL(<fs_field5>).
+            IF <fs_field5>-low is NOT INITIAL.
+              TRANSLATE <fs_field5>-low TO UPPER CASE.
+            ENDIF.
+             IF <fs_field5>-high is NOT INITIAL.
+              TRANSLATE <fs_field5>-high TO UPPER CASE.
+            ENDIF.
+          ENDLOOP.
+        WHEN 'Field6'.
+          lr_field6 = CORRESPONDING #( ls_return-select_options[] ).
+          LOOP AT lr_field6 ASSIGNING FIELD-SYMBOL(<fs_field6>).
+            IF <fs_field6>-low is NOT INITIAL.
+              TRANSLATE <fs_field6>-low TO UPPER CASE.
+            ENDIF.
+             IF <fs_field6>-high is NOT INITIAL.
+              TRANSLATE <fs_field6>-high TO UPPER CASE.
+            ENDIF.
+          ENDLOOP.
+      ENDCASE.
+    ENDLOOP.
+
+    LOOP AT it_filter_select_options INTO DATA(ls_filter) WHERE property = 'EntityType'.
+      LOOP AT ls_filter-select_options INTO DATA(ls_temp).
+        TRANSLATE ls_temp-low TO UPPER CASE.
+        CASE ls_temp-low.
+          WHEN 'CARRIER'.
+            DATA(lv_car) = 'X'.
+          WHEN 'LIFECYCLE'.
+            DATA(lv_lif) = 'X'.
+          WHEN 'ORGUNIT'.
+            DATA(lv_orgid) = 'X'.
+          WHEN 'FREIGHTORDERTYPE'.
+            DATA(lv_fot) = 'X'.
+          WHEN 'PLANNINGSTATUS'.
+            DATA(lv_pstat) = 'X'.
+          WHEN 'SHIPTOPARTY'.
+            DATA(lv_shipto) = 'X'.
+          WHEN 'ORGUNITGROUP'.
+            DATA(lv_orgroup) = 'X'.
+          WHEN 'CREATEDBY'.
+            DATA(lv_user) = 'X'.
+          WHEN 'WAREHOUSENUMBER'.
+            DATA(lv_whno) = 'X'.
+          WHEN 'WAREHOUSEDOOR'.
+            DATA(lv_whdo) = 'X'.
+          WHEN 'WAREHOUSEEXCSTATUS'.
+            DATA(lv_exestatus) = 'X'.
+          WHEN 'CONSIGNMENTORDERTYPE'.
+            DATA(lv_cotp) = 'X'.
+        ENDCASE.
+      ENDLOOP.
+
+    ENDLOOP.
+
+    CASE 'X'.
+      WHEN lv_car.
+*   Carrier
+        SELECT DISTINCT
+                   \_carrier[ (1) ]-businesspartner AS businesspartner,
+                    \_carrier[ (1) ]-businesspartnercategory AS businesspartnercategory,
+                    \_carrier[ (1) ]-personnumber AS personnumber,
+                    \_carrier[ (1) ]-businesspartnername AS businesspartnername,
+                    \_carrier[ (1) ]-organizationbpname1 AS organizationbpname1
+              FROM i_transportationorder WITH PRIVILEGED ACCESS "#EC CI_SEL_NESTED
+              WHERE   UPPER( \_carrier[ (1) ]-businesspartner  )        IN @lr_field1[]
+                AND   UPPER( \_carrier[ (1) ]-businesspartnercategory ) IN @lr_field2[]
+                AND   UPPER( \_carrier[ (1) ]-personnumber )            IN @lr_field3[]
+                AND   UPPER( \_carrier[ (1) ]-businesspartnername )     IN @lr_field4[]
+                AND   UPPER( \_carrier[ (1) ]-organizationbpname1 )     IN @lr_field5[]
+              ORDER BY  businesspartner
+              INTO TABLE @DATA(lt_carrrier) UP TO 500 ROWS.
+        IF sy-subrc = 0.
+
+          DELETE ADJACENT DUPLICATES FROM lt_carrrier COMPARING businesspartner.
+          ls_common = VALUE #( entitytype = 'CARRIER' label = 'X' field1 = 'Business partner' field2 = 'Business Partner Category'
+                                           field3 = 'Person number' field4 = 'Business Partner Name' field5 = 'Organization name' ).
+          APPEND ls_common TO lt_common.
+
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'businesspartner' field2 = 'businesspartnercategory'
+                                           field3 = 'personnumber' field4 = 'businesspartnername' field5 = 'organizationbpname1' ).
+          APPEND ls_common TO lt_common.
+          LOOP AT lt_carrrier ASSIGNING FIELD-SYMBOL(<fs_carrrier>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_carrrier>-businesspartner.
+            ls_common-field2 = <fs_carrrier>-businesspartnercategory.
+            ls_common-field3 = <fs_carrrier>-personnumber.
+            ls_common-field4 = <fs_carrrier>-businesspartnername.
+            ls_common-field5 = <fs_carrrier>-organizationbpname1.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+        ENDIF.
+
+      WHEN lv_lif.
+*   LifeCycle
+        SELECT DISTINCT
+          transpordlifecyclestatus,
+          transpordlifecyclestatusdesc
+          FROM i_transpordlifecyclestatustext        "#EC CI_SEL_NESTED
+          WHERE language = @sy-langu
+          AND UPPER( transpordlifecyclestatus ) in @lr_field1[]
+          AND UPPER( transpordlifecyclestatusdesc ) in @lr_field2[]
+          INTO TABLE @DATA(lt_lifecycle).
+        IF sy-subrc = 0.
+          ls_common = VALUE #( entitytype = 'LIFECYCLE' label = 'X' field1 = 'TranspOrd LifeCycle Status' field2 = 'TranspOrder LifeCycle Status Description' ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'TranspOrdLifeCycleStatus' field2 = 'TranspOrdLifeCycleStatusDesc').
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_lifecycle ASSIGNING FIELD-SYMBOL(<fs_lifecycle>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_lifecycle>-transpordlifecyclestatus.
+            ls_common-field2 = <fs_lifecycle>-transpordlifecyclestatusdesc.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+        ENDIF.
+      WHEN lv_orgroup.
+*   Plant And Execute Group
+
+        SELECT DISTINCT
+               organizationalunit,
+               businesspartner,
+               \_organizationalunittext[ (*) ]-organizationalunitshortname AS organizationalunitshortname ,
+               \_organizationalunittext[ (*) ]-organizationalunitname AS organizationalunitname,
+               organizationalunitexternalid
+          FROM i_transporganizationalunit            "#EC CI_SEL_NESTED
+          WHERE organizationalunitfunction = '13'
+            AND organizationalunitrole = '3'
+            AND \_organizationalunittext[ (*) ]-language = @sy-langu
+           AND  organizationalunit  in @lr_field1[]
+           AND  UPPER( businesspartner ) in @lr_field2[]
+           AND  UPPER( \_organizationalunittext[ (*) ]-organizationalunitshortname ) in @lr_field3[]
+           AND  UPPER( \_organizationalunittext[ (*) ]-organizationalunitname ) in @lr_field4[]
+           AND  UPPER( organizationalunitexternalid ) in @lr_field5[]
+          INTO TABLE @DATA(lt_tmorganizationalunit)
+          .
+
+        IF sy-subrc = 0.
+          ls_common = VALUE #( entitytype = 'PLANTANDEXCGROUP' label = 'X' field1 = 'Organizational Unit' field2 = 'Business Partner'
+                               field3 = 'Organizational Unit Short Name' field4 = 'Organizational Unit Name' field5 = 'Organizational Unit External id' ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'organizationalunit' field2 = 'BusinessPartner'
+                              field3 = 'OrganizationalUnitShortName' field4 = 'OrganizationalUnitName' field5 = 'organizationalunitexternalid' ).
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_tmorganizationalunit ASSIGNING FIELD-SYMBOL(<fs_tmorganizationalunit>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_tmorganizationalunit>-organizationalunit.
+            ls_common-field2 = <fs_tmorganizationalunit>-businesspartner.
+            ls_common-field3 = <fs_tmorganizationalunit>-organizationalunitshortname.
+            ls_common-field4 = <fs_tmorganizationalunit>-organizationalunitname.
+            ls_common-field5 = <fs_tmorganizationalunit>-organizationalunitexternalid.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+
+        ENDIF.
+      WHEN lv_orgid.
+*   Plant And Execute Org.
+        SELECT DISTINCT
+               organizationalunit,
+               businesspartner,
+               \_organizationalunittext[ (*) ]-organizationalunitshortname AS organizationalunitshortname ,
+               \_organizationalunittext[ (*) ]-organizationalunitname AS organizationalunitname,
+               organizationalunitexternalid
+          FROM i_transporganizationalunit            "#EC CI_SEL_NESTED
+          WHERE organizationalunitfunction = '13'
+             AND organizationalunitrole = '1'
+             AND \_organizationalunittext[ (*) ]-language = @sy-langu
+             AND    organizationalunit                    in @lr_field1
+             AND    UPPER( businesspartner )              in @lr_field2
+             AND    UPPER( \_organizationalunittext[ (*) ]-organizationalunitshortname )  in @lr_field3
+             AND    UPPER( \_organizationalunittext[ (*) ]-organizationalunitname )       in @lr_field4
+             AND    UPPER( organizationalunitexternalid ) in @lr_field5
+          INTO TABLE @DATA(lt_tmorganizationalunitorg)
+          .
+        IF sy-subrc = 0.
+          ls_common = VALUE #( entitytype = 'PLANTANDEXCORG' label = 'X' field1 = 'Organizational Unit' field2 = 'Business Partner'
+                               field3 = 'Organizational Unit Short Name' field4 = 'Organizational Unit Name' field5 = 'Organizational Unit External id' ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'organizationalunit' field2 = 'BusinessPartner'
+                              field3 = 'OrganizationalUnitShortName' field4 = 'OrganizationalUnitName' field5 = 'organizationalunitexternalid' ).
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_tmorganizationalunitorg ASSIGNING FIELD-SYMBOL(<fs_tmorganizationalunitorg>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_tmorganizationalunitorg>-organizationalunit.
+            ls_common-field2 = <fs_tmorganizationalunitorg>-businesspartner.
+            ls_common-field3 = <fs_tmorganizationalunitorg>-organizationalunitshortname.
+            ls_common-field4 = <fs_tmorganizationalunitorg>-organizationalunitname.
+            ls_common-field5 = <fs_tmorganizationalunitorg>-organizationalunitexternalid.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+
+        ENDIF.
+      WHEN lv_fot.
+*   Freight Order Type
+        SELECT DISTINCT                              "#EC CI_SEL_NESTED
+          transportationordertype,
+          transportationordertypedesc
+          FROM i_freightordertypevh
+          WHERE UPPER( transportationordertype ) in @lr_field1
+          AND   UPPER( transportationordertypedesc ) in @lr_field2
+          INTO TABLE @DATA(lt_fotype).
+        IF sy-subrc = 0.
+          ls_common = VALUE #( entitytype = 'FREIGHTORDERTYPE' label = 'X' field1 = 'Transportation Order T\ype' field2 = 'Order Type Description'
+                        ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'TransportationOrderType' field2 = 'TransportationOrderTypeDesc'
+                        ).
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_fotype ASSIGNING FIELD-SYMBOL(<fs_fotype>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_fotype>-transportationordertype.
+            ls_common-field2 = <fs_fotype>-transportationordertypedesc.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+
+        ENDIF.
+      WHEN lv_pstat.
+*   Transportation Planning Status
+        SELECT DISTINCT                              "#EC CI_SEL_NESTED
+          transpordplanningstatus,
+          transpordplanningstatusdesc
+          FROM i_transpordplanningstatust
+          WHERE language = @sy-langu
+          AND UPPER( transpordplanningstatus ) in @lr_field1[]
+          AND UPPER( transpordplanningstatusdesc ) in @lr_field2[]
+          INTO TABLE @DATA(lt_trpo_status).
+        IF sy-subrc = 0.
+          ls_common = VALUE #( entitytype = 'TRANSPORTPLANNINGSTATUS' label = 'X' field1 = 'TranspOrder Planning Status' field2 = 'TranspOrder Planning Status Description'
+                        ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'TranspOrdPlanningStatus' field2 = 'TranspOrdPlanningStatusDesc'
+                        ).
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_trpo_status ASSIGNING FIELD-SYMBOL(<fs_trpo_status>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_trpo_status>-transpordplanningstatus.
+            ls_common-field2 = <fs_trpo_status>-transpordplanningstatusdesc.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+
+        ENDIF.
+      WHEN lv_shipto.
+
+*   Shiptoparty
+        SELECT DISTINCT                       "#EC CI_USAGE_OK[3067314]
+                     customer,
+                     customerfullname,
+                     organizationbpname1,
+                     organizationbpname2,
+                     customeraccountgroup,
+                     authorizationgroup,
+                     cityname,
+                     postalcode,
+                     streetname
+          FROM i_customer WITH PRIVILEGED ACCESS
+          WHERE UPPER( customer )         IN @lr_field1[]
+            AND UPPER( customerfullname ) IN @lr_field2[]
+          INTO TABLE @DATA(lt_shiptoparty) UP TO 501 ROWS. "#EC CI_SEL_NESTED        "#EC CI_NOWHERE
+        IF sy-subrc IS INITIAL.
+          ls_common = VALUE #( entitytype = 'SHIPTOPARTY' label = 'X' field1 = 'Ship to Party' field2 = 'Description'
+                        ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'Customer' field2 = 'CustomerFullName' field3 = 'organizationbpname1' field4 = 'organizationbpname2'
+                                field5 = 'customeraccountgroup' field6 = 'authorizationgroup' field7 = 'cityname' field8 = 'postalcode' field9 = 'streetname'
+                        ).
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_shiptoparty ASSIGNING FIELD-SYMBOL(<fs_shiptoparty>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_shiptoparty>-customer.
+            ls_common-field2 = <fs_shiptoparty>-customerfullname.
+            ls_common-field3 = <fs_shiptoparty>-organizationbpname1.
+            ls_common-field4 = <fs_shiptoparty>-organizationbpname2.
+            ls_common-field5 = <fs_shiptoparty>-customeraccountgroup.
+            ls_common-field6 = <fs_shiptoparty>-authorizationgroup.
+            ls_common-field7 = <fs_shiptoparty>-cityname.
+            ls_common-field8 = <fs_shiptoparty>-postalcode.
+            ls_common-field9 = <fs_shiptoparty>-streetname.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+        ENDIF.
+      WHEN lv_user.
+        SELECT DISTINCT
+                    username,
+                    FirstName,
+                    LastName,
+                    FullName,
+                    email
+       FROM /rb1m/sd_i_emailadress
+       WHERE   UPPER( username )  IN @lr_field1[]
+           AND UPPER( FirstName ) IN @lr_field2[]
+           AND UPPER( lastname ) IN @lr_field3[]
+           AND UPPER( FullName ) IN @lr_field4[]
+       INTO TABLE @DATA(lt_user) UP TO 500 ROWS.
+        IF sy-subrc = 0.
+          SORT lt_user ASCENDING BY username.
+          DELETE ADJACENT DUPLICATES FROM lt_user COMPARING username.
+          ls_common = VALUE #( entitytype = 'CREATEDBY' label = 'X' field1 = 'User ID' field2 = 'First Name'
+                        field3 = 'Last Name' field4 = 'Full Name'
+                       ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'UserName' field2 = 'FirstName' field3 = 'LastName'
+                              field4 = 'FullName'
+                        ).
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_user ASSIGNING FIELD-SYMBOL(<fs_user>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_user>-username.
+            ls_common-field2 = <fs_user>-firstname.
+            ls_common-field3 = <fs_user>-lastname.
+            ls_common-field4 = <fs_user>-fullname.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+        ENDIF.
+
+      WHEN lv_whno .
+        SELECT WarehouseNumber, WarehouseDescription,
+          WarehouseNumberNew,warehousedescriptionnew
+           FROM /rb1m/sd_warehouse_info
+              WHERE language = @sy-langu
+              AND  UPPER( WarehouseNumber ) in @lr_field1[]
+              AND  UPPER( WarehouseDescription ) in @lr_field2[]
+              INTO TABLE @DATA(lt_wh).
+        IF sy-subrc = 0.
+
+          ls_common = VALUE #( entitytype = 'WAREHOUSEDOOR' label = 'X' field1 = 'Warehouse Number' field2 = 'Description'
+                        ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'WarehouseNumber' field2 = 'WarehouseDescription'
+                        ).
+          APPEND ls_common TO lt_common.
+          lr_lgnum = VALUE #( BASE lr_lgnum FOR ls_wh IN lt_wh ( sign = 'E' option = 'EQ' low = ls_wh-warehousenumbernew )  ).
+          SELECT * FROM /scwm/t300t WHERE lgnum IN @lr_lgnum
+                                      AND spras = @sy-langu INTO TABLE @DATA(lt_ewm).
+          IF sy-subrc = 0.
+            lt_tmp = CORRESPONDING #( lt_ewm ).
+          ENDIF.
+          LOOP AT lt_tmp INTO DATA(ls_ewm).
+            READ TABLE lt_wh TRANSPORTING NO FIELDS WITH KEY warehousenumbernew = ls_ewm-lgnum.
+            IF sy-subrc NE 0.
+              APPEND VALUE /rb1m/sd_warehouse_info( warehousenumbernew = ls_ewm-lgnum
+                                                    warehousedescriptionnew = ls_ewm-lnumt  ) TO lt_wh.
+            ENDIF.
+
+          ENDLOOP.
+          CLEAR : lt_ewm.
+          LOOP AT lt_wh ASSIGNING FIELD-SYMBOL(<fs_tnp>).
+            CLEAR : ls_common,ls_ewm.
+            ls_common-field1 = <fs_tnp>-warehousenumbernew .
+            ls_common-field2 = <fs_tnp>-warehousedescriptionnew.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+        ENDIF.
+
+
+      WHEN lv_whdo.
+         SELECT WarehouseNumber, WarehouseDescription,
+          WarehouseNumberNew,warehousedescriptionnew
+           FROM /rb1m/sd_warehouse_info
+              WHERE language = @sy-langu
+              "AND  UPPER( WarehouseNumber ) in @lr_field1[]
+              "AND  UPPER( WarehouseDescription ) in @lr_field2[]
+              INTO TABLE @lt_wh.
+        IF sy-subrc = 0.
+
+          lr_lgnum = VALUE #( BASE lr_lgnum FOR ls_wh IN lt_wh ( sign = 'E' option = 'EQ' low = ls_wh-warehousenumbernew )  ).
+          SELECT * FROM /scwm/t300t WHERE lgnum IN @lr_lgnum
+                                      AND spras = @sy-langu INTO TABLE @lt_ewm.
+          IF sy-subrc = 0.
+            lt_tmp = CORRESPONDING #( lt_ewm ).
+          ENDIF.
+          LOOP AT lt_tmp INTO ls_ewm.
+            READ TABLE lt_wh TRANSPORTING NO FIELDS WITH KEY warehousenumbernew = ls_ewm-lgnum.
+            IF sy-subrc NE 0.
+              APPEND VALUE /rb1m/sd_warehouse_info( warehousenumbernew = ls_ewm-lgnum
+                                                    warehousedescriptionnew = ls_ewm-lnumt  ) TO lt_wh.
+            ENDIF.
+
+          ENDLOOP.
+
+        ENDIF.
+
+          CLEAR: lr_lgnum, ls_common, lt_common.
+          lr_lgnum = VALUE #( BASE lr_lgnum FOR ls_wh IN lt_wh ( sign = 'I' option = 'EQ' low = ls_wh-warehousenumbernew )  ).
+          CHECK lr_lgnum IS NOT INITIAL.
+          SELECT lgnum AS warehousenumber,
+                 door AS  warehousedoor,
+                 load_dir AS loadingdirection,
+                 sc_unit_lp AS loadingpoint
+            FROM /scwm/tdoor
+              WHERE UPPER( lgnum )      IN @lr_lgnum
+               AND  UPPER( lgnum )      IN @lr_field1
+               AND  UPPER( door )       IN @lr_field2
+               AND  UPPER( load_dir )    IN @lr_field3
+               AND  UPPER( sc_unit_lp )  IN @lr_field4
+            INTO TABLE @DATA(lt_whdoor).
+          IF sy-subrc = 0.
+            ls_common = VALUE #( entitytype = 'WAREHOUSENUMBER' label = 'X' field1 = 'Warehouse Number' field2 = 'Warehouse Door' field3 = 'Loading Direction' field4 = 'Unloading/Loading Point'
+                          ).
+            APPEND ls_common TO lt_common.
+            ls_common = VALUE #( technicalfield = 'X' field1 = 'WarehouseNumber' field2 = 'WarehouseDoor' field3 = 'LoadingDirection' field4 = 'LoadingPoint'
+                          ).
+            APPEND ls_common TO lt_common.
+
+            LOOP AT lt_whdoor ASSIGNING FIELD-SYMBOL(<fs_whdoor>).
+              CLEAR : ls_common.
+              ls_common-field1 = <fs_whdoor>-warehousenumber.
+              ls_common-field2 = <fs_whdoor>-warehousedoor.
+              ls_common-field3 = <fs_whdoor>-loadingdirection.
+              ls_common-field4 = <fs_whdoor>-loadingpoint.
+              APPEND ls_common TO lt_common.
+            ENDLOOP.
+
+          ENDIF.
+
+      WHEN lv_exestatus.
+        SELECT DISTINCT                              "#EC CI_SEL_NESTED
+                       transpordstophndlgexecstatus,
+                        transpordstophndlgexecstsdesc
+                      FROM i_transphndlgexecstatustext
+                      WHERE language = @sy-langu
+                       AND UPPER( transpordstophndlgexecstatus ) in @lr_field1
+                       AND UPPER( transpordstophndlgexecstsdesc ) in @lr_field2
+                      INTO TABLE @DATA(lt_transphndlgexecstatus).
+        IF sy-subrc = 0.
+          ls_common = VALUE #( entitytype = 'WAREHOUSEEXCSTATUS' label = 'X' field1 = 'TranspOrd Stop Execution Status' field2 = 'Description'
+                        ).
+          APPEND ls_common TO lt_common.
+          ls_common = VALUE #( technicalfield = 'X' field1 = 'TranspOrdStopHndlgExecStatus' field2 = 'TranspOrdStopHndlgExecStsDesc'
+                        ).
+          APPEND ls_common TO lt_common.
+
+          LOOP AT lt_transphndlgexecstatus ASSIGNING FIELD-SYMBOL(<fs_execstatus>).
+            CLEAR : ls_common.
+            ls_common-field1 = <fs_execstatus>-transpordstophndlgexecstatus.
+            ls_common-field2 = <fs_execstatus>-transpordstophndlgexecstsdesc.
+            APPEND ls_common TO lt_common.
+          ENDLOOP.
+
+        ENDIF.
+      WHEN lv_cotp.
+*        SELECT * FROM i_transpordshipgtypevh INTO TABLE @DATA(lt_cotp).
+    ENDCASE.
+** $inlinecount query option for all count entries.
+    IF io_tech_request_context->has_inlinecount( ) = abap_true.
+      DESCRIBE TABLE lt_common LINES es_response_context-inlinecount.
+      es_response_context-inlinecount =  es_response_context-inlinecount - 2.
+    ELSE.
+      CLEAR es_response_context-inlinecount.
+    ENDIF.
+*- For paging i.e. $top and $skip
+    /iwbep/cl_mgw_data_util=>paging(
+                                EXPORTING   is_paging = is_paging
+                                CHANGING    ct_data   = lt_common
+                                   ).
+    et_entityset = COND #( WHEN lt_common IS NOT INITIAL
+                           THEN CORRESPONDING #( lt_common MAPPING field1 = field1
+                                                                   field2 = field2
+                                                                   field3 = field3
+                                                                   field4 = field4
+                                                                   field5 = field5
+                                                                   field6 = field6
+                                                                   field7 = field7
+                                                                   field8 = field8
+                                                                   field9 = field9
+                                                                   ) ).
+  ENDMETHOD.
+
+
+  METHOD outputset_get_entityset.
+    DATA: lt_output TYPE /rb1m/cl_sd_printout_d_mpc=>tt_output.
+    DATA: lr_appl  TYPE /rb1m/if_sd_printout_dataprovd=>tr_appl.
+    DATA: lv_green(1)  TYPE c,
+          lv_yellow(1) TYPE c.
+    DATA : lr_codoc     TYPE /rb1m/if_sd_printout_dataprovd=>tr_doc,
+           lr_fodoc     TYPE /rb1m/if_sd_printout_dataprovd=>tr_doc,
+           lv_status    TYPE char10,
+           lr_unprocess TYPE /rb1m/if_sd_printout_dataprovd=>tr_proc,
+           lt_keys      TYPE /bobf/t_frw_key.
+
+    CLEAR : lv_green,lv_yellow.
+
+    LOOP AT it_filter_select_options INTO DATA(ls_filter) .
+      IF ls_filter-property = 'CODocument'.
+        lr_codoc = CORRESPONDING #( ls_filter-select_options[] ).
+
+      ELSEIF ls_filter-property = 'FreightOrderDocument'.
+        lr_fodoc = CORRESPONDING #( ls_filter-select_options[] ).
+      ELSEIF ls_filter-property = 'ProcessStatus'.
+        DATA(lv_incl_unprocessed) = VALUE #( ls_filter-select_options[ 1 ]-low  OPTIONAL ).
+      ENDIF.
+    ENDLOOP.
+
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_shipping_data
+      EXPORTING
+        it_select_options = it_filter_select_options
+      IMPORTING
+        et_freightorder   = DATA(lt_freightorder).
+
+    CHECK lt_freightorder IS NOT INITIAL.
+    SORT lt_freightorder ASCENDING BY codocument.
+    DELETE ADJACENT DUPLICATES FROM lt_freightorder COMPARING codocument.
+
+    IF lv_incl_unprocessed IS NOT INITIAL.
+
+      SPLIT lv_incl_unprocessed AT '|' INTO DATA(lv_sta_green) DATA(lv_sta_yellow).
+      lr_unprocess = VALUE #( ( sign = 'I'
+                                option = 'EQ'
+                                low = lv_sta_green
+                              )
+                              ( sign = 'I'
+                                option = 'EQ'
+                                low = lv_sta_yellow
+                              ) ).
+      DELETE lr_unprocess WHERE low IS INITIAL.
+
+    ENDIF.
+
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_output_type
+      EXPORTING
+        it_freightorder = lt_freightorder
+        ir_process      = lr_unprocess
+        iv_check_fiori  = 'X'
+      IMPORTING
+        et_output       = lt_output.
+    IF lv_sta_green IS NOT INITIAL AND lv_sta_yellow IS NOT INITIAL.
+    ELSEIF lv_sta_green IS INITIAL AND lv_sta_yellow IS INITIAL.
+      CLEAR lt_output .
+    ELSE.
+      IF lv_sta_green IS NOT INITIAL.
+        DELETE lt_output WHERE processstatus NE lv_sta_green.
+      ELSEIF lv_sta_yellow IS NOT INITIAL.
+        DELETE lt_output WHERE processstatus NE lv_sta_yellow.
+      ENDIF.
+    ENDIF.
+    DELETE lt_output WHERE application = 'V3'.      " Hide V3, only display V2 vs V7 on Frontend
+*    Adding and display the CO output type of PPF action to PDF2Mail....
+    lv_green = COND #( WHEN lv_sta_green IS NOT INITIAL
+                       THEN lv_sta_green ).
+    lv_yellow = COND #( WHEN lv_sta_yellow IS NOT INITIAL
+                        THEN lv_sta_yellow ).
+
+    IF lt_output IS NOT INITIAL.
+      CALL METHOD /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~pdf2mail_get_access_data(
+        EXPORTING
+          iv_process_green  = lv_green
+          iv_process_yellow = lv_yellow
+        CHANGING
+          ct_output         = lt_output
+      ).
+    ELSE.
+      IF lr_unprocess IS NOT INITIAL.
+        LOOP AT lt_freightorder INTO DATA(ls_freightorder).
+
+          APPEND VALUE #(  objectkey = ls_freightorder-gui_id
+                           shippingpoint = ls_freightorder-shippingpoint
+                           shiptoparty   = ls_freightorder-shiptoparty  ) TO lt_output.
+        ENDLOOP.
+
+        CALL METHOD /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~pdf2mail_get_access_data(
+          EXPORTING
+            iv_process_green  = lv_green
+            iv_process_yellow = lv_yellow
+          CHANGING
+            ct_output         = lt_output
+        ).
+      ENDIF.
+
+    ENDIF.
+
+    et_entityset = COND #( WHEN lt_output IS NOT INITIAL
+                           THEN
+                           VALUE #(
+                                BASE et_entityset FOR ls_output IN lt_output
+                                  WHERE ( messagetype IS NOT INITIAL
+                                       OR actiontype IS NOT INITIAL )
+                                     ( application = ls_output-application
+                                       messagetype = ls_output-messagetype
+                                       description = ls_output-description
+                                       actiontype  = ls_output-actiontype
+                                       sequence    = ls_output-sequence ) )
+                                     ) .
+    SORT  et_entityset BY application messagetype actiontype .
+    DELETE ADJACENT DUPLICATES FROM et_entityset COMPARING application messagetype actiontype.
+    SORT et_entityset ASCENDING BY sequence. "....To display it in Frontend
+  ENDMETHOD.
+
+
+  METHOD textset_get_entityset.
+
+    DATA : lt_text TYPE /rb1m/cl_sd_printout_d_mpc=>tt_text.
+    DATA : lv_langu TYPE sy-langu.
+    DATA : lv_text TYPE tdobname.
+
+*   Get Text for body of email.
+    lv_text = '/RB1M/SD_PRINTOUT_EMAIL'.
+    LOOP AT it_filter_select_options INTO DATA(ls_filter) .
+      IF ls_filter-property = 'Language'.
+        DATA(lv_langu_input) = VALUE #( ls_filter-select_options[ 1 ]-low OPTIONAL ).
+      ENDIF.
+    ENDLOOP.
+
+    CALL FUNCTION 'CONVERSION_EXIT_ISOLA_INPUT'
+      EXPORTING
+        input                 = lv_langu_input
+     IMPORTING
+       OUTPUT                 = lv_langu
+     EXCEPTIONS
+       UNKNOWN_LANGUAGE       = 1
+       OTHERS                 = 2
+              .
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_text(
+      EXPORTING
+        iv_text  = lv_text
+        iv_langu = lv_langu
+      IMPORTING
+        et_text  = lt_text
+    ).
+    IF lt_text IS NOT INITIAL.
+      et_entityset = CORRESPONDING #( lt_text MAPPING textid = textid
+                                                      textvalue = textvalue )  .
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+  METHOD emailset_get_entityset.
+    DATA: lt_mail TYPE /rb1m/cl_sd_printout_d_mpc=>tt_email,
+          ls_mail TYPE  /rb1m/cl_sd_printout_d_mpc=>ts_email.
+    TRY.
+        CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_email_address
+          IMPORTING
+            ev_email = DATA(lv_mail).
+
+        IF lv_mail IS NOT INITIAL.
+          ls_mail-emailid = lv_mail.
+          ls_mail-userid = sy-uname.
+          APPEND ls_mail TO lt_mail.
+
+          et_entityset = CORRESPONDING #( lt_mail ).
+
+        ENDIF.
+
+      CATCH /iwbep/cx_mgw_busi_exception.
+      CATCH /iwbep/cx_mgw_tech_exception.
+    ENDTRY.
+  ENDMETHOD.
+ENDCLASS.
