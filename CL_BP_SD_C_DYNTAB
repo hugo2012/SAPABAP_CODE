@@ -1,0 +1,2141 @@
+CLASS /rb1m/cl_bp_sd_c_dyntab DEFINITION PUBLIC ABSTRACT FINAL FOR BEHAVIOR OF /rb1m/sd_c_dyntab.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_BP_SD_C_DYNTAB IMPLEMENTATION.
+ENDCLASS.
+//////////////////
+CLASS lcl_buffer DEFINITION.
+
+  PUBLIC SECTION.
+    CLASS-DATA:
+      gs_dyntab   TYPE /rb1m/sd_c_dyntab,
+      gt_header   TYPE TABLE OF /rb1m/sd_c_header,
+      gt_items    TYPE TABLE OF /rb1m/sd_c_items,
+      gs_plant    TYPE /rb1m/sd_c_plant,
+      gs_shippo   TYPE /rb1m/sd_c_shippoint,
+      gt_r_vendor TYPE RANGE OF char20,
+      gt_r_purord TYPE RANGE OF char20,
+      gt_r_reqdat TYPE RANGE OF datum,
+      gs_warhno   TYPE /rb1m/sd_c_warehno,
+      gt_r_storty TYPE RANGE OF char10,
+      gt_r_storbi TYPE RANGE OF char30,
+      gt_r_matnr  TYPE RANGE OF char50,
+      gt_r_assepr TYPE RANGE OF char50,
+      gt_r_compo  TYPE RANGE OF char50,
+      gt_assembly TYPE TABLE OF /rb1m/sd_availstock,
+      gt_componen TYPE TABLE OF /rb1m/sd_availstock_compo,
+      gt_msgres   TYPE TABLE OF /rb1m/sd_c_msgres.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_dyntab DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR /rb1m/sd_c_dyntab RESULT result.
+
+    METHODS get_deep FOR MODIFY
+      IMPORTING dyntab    FOR CREATE /rb1m/sd_c_dyntab
+                headernav FOR CREATE /rb1m/sd_c_dyntab\_headernav
+                itemsnav  FOR CREATE /rb1m/sd_c_dyntab\_itemsnav
+                vendornav FOR CREATE /rb1m/sd_c_dyntab\_vendornav
+                purordnav FOR CREATE /rb1m/sd_c_dyntab\_purordnav
+                reqdatnav FOR CREATE /rb1m/sd_c_dyntab\_reqdatnav
+                stortynav FOR CREATE /rb1m/sd_c_dyntab\_stortynav
+                storbinav FOR CREATE /rb1m/sd_c_dyntab\_storbinav
+                asseprnav FOR CREATE /rb1m/sd_c_dyntab\_asseprnav
+                componav  FOR CREATE /rb1m/sd_c_dyntab\_componav
+                message   FOR CREATE /rb1m/sd_c_dyntab\_message.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_dyntab.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_dyntab.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_dyntab RESULT result.
+
+    METHODS lock FOR LOCK
+      IMPORTING keys FOR LOCK /rb1m/sd_c_dyntab.
+
+    METHODS rba_headernav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_headernav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_itemsnav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_itemsnav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_vendornav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_vendornav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_purordnav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_purordnav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_reqdatnav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_reqdatnav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_stortynav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_stortynav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_storbinav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_storbinav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_asseprnav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_asseprnav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_componav FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_componav FULL result_requested RESULT result LINK association_links.
+
+    METHODS rba_message FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_dyntab\_message FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_dyntab IMPLEMENTATION.
+
+  METHOD get_instance_authorizations.
+  ENDMETHOD.
+
+  METHOD get_deep.
+
+**********************************************************************
+    READ TABLE dyntab INDEX 1 INTO DATA(ls_dyntab).
+    lcl_buffer=>gs_dyntab = CORRESPONDING #( ls_dyntab ).
+
+    DATA ls_header LIKE LINE OF lcl_buffer=>gt_header.
+
+**********************************************************************
+    LOOP AT headernav INTO DATA(ls_headernav).
+      LOOP AT ls_headernav-%target INTO DATA(ls_heatarget).
+        ls_header = CORRESPONDING #( ls_heatarget ).
+
+        APPEND ls_header TO lcl_buffer=>gt_header.
+        CLEAR ls_header.
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_items LIKE LINE OF lcl_buffer=>gt_items.
+
+    LOOP AT itemsnav INTO DATA(ls_itemsnav).
+      LOOP AT ls_itemsnav-%target INTO DATA(ls_itmtarget).
+        ls_items = CORRESPONDING #( ls_itmtarget ).
+
+        APPEND ls_items TO lcl_buffer=>gt_items.
+        CLEAR ls_items.
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_r_vendor LIKE LINE OF lcl_buffer=>gt_r_vendor.
+
+    LOOP AT vendornav INTO DATA(ls_vendornav).
+      LOOP AT ls_vendornav-%target INTO DATA(ls_ventarget).
+        ls_r_vendor-sign   = ls_ventarget-sign.
+        ls_r_vendor-option = ls_ventarget-optio.
+        ls_r_vendor-low    = ls_ventarget-low.
+        ls_r_vendor-high   = ls_ventarget-high.
+
+        APPEND ls_r_vendor TO lcl_buffer=>gt_r_vendor.
+        CLEAR ls_r_vendor.
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_r_purord LIKE LINE OF lcl_buffer=>gt_r_purord.
+
+    LOOP AT purordnav INTO DATA(ls_purordnav).
+      LOOP AT ls_purordnav-%target INTO DATA(ls_potarget).
+        ls_r_purord-sign   = ls_potarget-sign.
+        ls_r_purord-option = ls_potarget-optio.
+        ls_r_purord-low    = ls_potarget-low.
+        ls_r_purord-high   = ls_potarget-high.
+
+        APPEND ls_r_purord TO lcl_buffer=>gt_r_purord.
+        CLEAR ls_r_purord.
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_r_reqdat LIKE LINE OF lcl_buffer=>gt_r_reqdat.
+
+    LOOP AT reqdatnav INTO DATA(ls_reqdatnav).
+      LOOP AT ls_reqdatnav-%target INTO DATA(ls_dattarget).
+        ls_r_reqdat-sign   = ls_dattarget-sign.
+        ls_r_reqdat-option = ls_dattarget-optio.
+
+        IF ls_dattarget-low IS NOT INITIAL.
+          DATA(lv_date_low) = replace( val = ls_dattarget-low regex = '(\d{4})-(\d{2})-(\d{2}).*' with = '$1$2$3' occ = 0 ).
+          ls_r_reqdat-low   = lv_date_low+1(8).
+        ENDIF.
+
+        IF ls_dattarget-high IS NOT INITIAL.
+          DATA(lv_date_hig) = replace( val = ls_dattarget-high regex = '(\d{4})-(\d{2})-(\d{2}).*' with = '$1$2$3' occ = 0 ).
+          ls_r_reqdat-high  = lv_date_hig+1(8).
+        ENDIF.
+
+        APPEND ls_r_reqdat TO lcl_buffer=>gt_r_reqdat.
+        CLEAR ls_r_reqdat.
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_r_storty LIKE LINE OF lcl_buffer=>gt_r_storty.
+
+    LOOP AT stortynav INTO DATA(ls_stortynav).
+      LOOP AT ls_stortynav-%target INTO DATA(ls_stytarget).
+        ls_r_storty-sign   = ls_stytarget-sign.
+        ls_r_storty-option = ls_stytarget-optio.
+        ls_r_storty-low    = ls_stytarget-low.
+        ls_r_storty-high   = ls_stytarget-high.
+
+        APPEND ls_r_storty TO lcl_buffer=>gt_r_storty.
+        CLEAR ls_r_storty.
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_r_storbi LIKE LINE OF lcl_buffer=>gt_r_storbi.
+
+    LOOP AT storbinav INTO DATA(ls_storbinav).
+      LOOP AT ls_storbinav-%target INTO DATA(ls_sbitarget).
+        ls_r_storbi-sign   = ls_sbitarget-sign.
+        ls_r_storbi-option = ls_sbitarget-optio.
+        ls_r_storbi-low    = ls_sbitarget-low.
+        ls_r_storbi-high   = ls_sbitarget-high.
+
+        APPEND ls_r_storbi TO lcl_buffer=>gt_r_storbi.
+        CLEAR ls_r_storbi.
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_r_assepr LIKE LINE OF lcl_buffer=>gt_r_assepr.
+
+    LOOP AT asseprnav INTO DATA(ls_asseprnav).
+      LOOP AT ls_asseprnav-%target INTO DATA(ls_asetarget).
+
+        TRANSLATE ls_asetarget-low USING '* '.
+        CONDENSE ls_asetarget-low NO-GAPS.
+
+        TRANSLATE ls_asetarget-high USING '* '.
+        CONDENSE ls_asetarget-high NO-GAPS.
+
+        CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+          EXPORTING
+            input  = ls_asetarget-low
+          IMPORTING
+            output = ls_asetarget-low.
+
+        CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+          EXPORTING
+            input  = ls_asetarget-high
+          IMPORTING
+            output = ls_asetarget-high.
+
+        ls_r_assepr-sign   = ls_asetarget-sign.
+        ls_r_assepr-option = ls_asetarget-optio.
+        ls_r_assepr-low    = ls_asetarget-low.
+        ls_r_assepr-high   = ls_asetarget-high.
+
+        APPEND ls_r_assepr TO lcl_buffer=>gt_r_assepr.
+        APPEND ls_r_assepr TO lcl_buffer=>gt_r_matnr.
+        CLEAR ls_r_assepr.
+
+      ENDLOOP.
+    ENDLOOP.
+
+**********************************************************************
+    DATA ls_r_compo LIKE LINE OF lcl_buffer=>gt_r_compo.
+
+    LOOP AT componav INTO DATA(ls_componav).
+      LOOP AT ls_componav-%target INTO DATA(ls_comtarget).
+
+        TRANSLATE ls_comtarget-low USING '* '.
+        CONDENSE ls_comtarget-low NO-GAPS.
+
+        TRANSLATE ls_comtarget-high USING '* '.
+        CONDENSE ls_comtarget-high NO-GAPS.
+
+        CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+          EXPORTING
+            input  = ls_comtarget-low
+          IMPORTING
+            output = ls_comtarget-low.
+
+        CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+          EXPORTING
+            input  = ls_comtarget-high
+          IMPORTING
+            output = ls_comtarget-high.
+
+        ls_r_compo-sign   = ls_comtarget-sign.
+        ls_r_compo-option = ls_comtarget-optio.
+        ls_r_compo-low    = ls_comtarget-low.
+        ls_r_compo-high   = ls_comtarget-high.
+
+        APPEND ls_r_compo TO lcl_buffer=>gt_r_compo.
+        APPEND ls_r_compo TO lcl_buffer=>gt_r_matnr.
+        CLEAR ls_r_compo.
+      ENDLOOP.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+
+    result = VALUE #(
+          ( mainid  = lcl_buffer=>gs_dyntab-mainid
+            title   = lcl_buffer=>gs_dyntab-title
+            runmode = lcl_buffer=>gs_dyntab-runmode )
+        ).
+
+  ENDMETHOD.
+
+  METHOD lock.
+  ENDMETHOD.
+
+  METHOD rba_headernav.
+
+    result = VALUE #(
+          " Header Description
+          ( mainindex = 1
+            headerindex = 1
+            ismain = 'X'
+            headername = 'TRAFF_LGT'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Traffic Light'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 2
+            ismain = 'X'
+            headername = 'SUPP_NO'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Supplier Number'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 3
+            ismain = 'X'
+            headername = 'SUPP_NAME'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Supplier Name'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 4
+            ismain = 'X'
+            headername = 'SUPP_CITY'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Supplier City'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 5
+            ismain = 'X'
+            headername = 'SUPP_CTRY'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Supplier Country'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 6
+            ismain = 'X'
+            headername = 'PO_NO'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Purchase Document'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 7
+            ismain = 'X'
+            headername = 'ASSE_PRD'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Assembly Product'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 8
+            ismain = 'X'
+            headername = 'PRD_DESCR'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Product Description'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 9
+            ismain = 'X'
+            headername = 'COMPONENT'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Component'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 10
+            ismain = 'X'
+            headername = 'COMP_DESCR'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Component Description'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 11
+            ismain = 'X'
+            headername = 'STOCK'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Stock'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 12
+            ismain = 'X'
+            headername = 'UOM'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Unit Of Measure'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 13
+            ismain = 'X'
+            headername = 'SUM_HU'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Sum. HU'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 14
+            ismain = 'X'
+            headername = 'STOCK_SUPP'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Stock At Supplier'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 15
+            ismain = 'X'
+            headername = 'BEN'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = ''
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 16
+            ismain = 'X'
+            headername = 'DEMAND'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Demand'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 17
+            ismain = 'X'
+            headername = 'SHIP_TO'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Ship To Party'
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 18
+            ismain = 'X'
+            headername = 'IsMain'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Is Main'
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 19
+            ismain = 'X'
+            headername = 'RootId'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Root ID'
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 20
+            ismain = 'X'
+            headername = 'ParentId'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Parent ID'
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 21
+            ismain = 'X'
+            headername = 'MainIndex'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Main Index'
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 22
+            ismain = 'X'
+            headername = 'HeaderIndex'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Header Index'
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 23
+            ismain = 'X'
+            headername = 'ItemsIndex'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Items Index'
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 24
+            ismain = 'X'
+            headername = 'EditDelQty'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Edit Deli Qty'
+            editable = ''
+            visible = '' )
+
+          " Item Description
+          ( mainindex = 1
+            headerindex = 1
+            ismain = ''
+            headername = 'ITM_TRAFF_LGT'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Traffic Light'
+            mainposition = 1
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 2
+            ismain = ''
+            headername = 'DELIVERY_NUMBER'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Delivery Number'
+            mainposition = 6
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 3
+            ismain = ''
+            headername = 'STOR_TYPE'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Storage Type'
+            mainposition = 7
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 4
+            ismain = ''
+            headername = 'STOR_BIN'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Storage Bin'
+            mainposition = 8
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 5
+            ismain = ''
+            headername = 'ITM_COMPNENT'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Component'
+            mainposition = 9
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 6
+            ismain = ''
+            headername = 'ITM_COMPDESCR'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Component Description'
+            mainposition = 10
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 7
+            ismain = ''
+            headername = 'ITM_STOCK'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Stock'
+            mainposition = 11
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 8
+            ismain = ''
+            headername = 'ITM_UOM'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Unit Of Measure'
+            mainposition = 12
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 9
+            ismain = ''
+            headername = 'ITM_SUMHU'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Sum. HU/Batch'
+            mainposition = 13
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 10
+            ismain = ''
+            headername = 'ITM_BATCH'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Batch'
+            mainposition = 14
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 11
+            ismain = ''
+            headername = 'ITM_BEN'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'BEN'
+            mainposition = 15
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 12
+            ismain = ''
+            headername = 'ITM_DEMAND'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Demand'
+            mainposition = 16
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 13
+            ismain = ''
+            headername = 'ITM_DELQTY'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Delivery Qty'
+            mainposition = 17
+            editable = ''
+            visible = 'X' )
+
+          ( mainindex = 1
+            headerindex = 14
+            ismain = ''
+            headername = 'IsMain'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Is Main'
+            mainposition = 18
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 15
+            ismain = ''
+            headername = 'RootId'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Root ID'
+            mainposition = 19
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 16
+            ismain = ''
+            headername = 'ParentId'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Parent ID'
+            mainposition = 20
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 17
+            ismain = ''
+            headername = 'MainIndex'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Main Index'
+            mainposition = 21
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 18
+            ismain = ''
+            headername = 'HeaderIndex'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Header Index'
+            mainposition = 22
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 19
+            ismain = ''
+            headername = 'ItemsIndex'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Items Index'
+            mainposition = 23
+            editable = ''
+            visible = '' )
+
+          ( mainindex = 1
+            headerindex = 20
+            ismain = ''
+            headername = 'EditDelQty'
+            headertype = 'String'
+            headerkey = ''
+            headervalue = 'Edit Deli Qty'
+            mainposition = 24
+            editable = ''
+            visible = '' )
+        ).
+
+
+  ENDMETHOD.
+
+  METHOD rba_itemsnav.
+    DATA lv_headidx  TYPE sy-tabix.
+    DATA lv_rootid   TYPE char30.
+    DATA lv_availqty TYPE int4.
+    DATA lv_delvqty  TYPE int4.
+    DATA lv_stockven TYPE int4.
+    DATA lv_delvqty_char TYPE char50.
+    DATA lv_demand   TYPE int4. "char30.
+    DATA lv_hucount  TYPE int4. "char10.
+    DATA lv_traffic  TYPE char10.
+    DATA lv_matnr    TYPE matnr.
+
+    DATA lt_limtv TYPE TABLE OF limtv.
+    DATA lt_lips  TYPE TABLE OF lips.
+    DATA ls_licom TYPE licom.
+    DATA(ls_dyntab) = lcl_buffer=>gs_dyntab.
+
+    CASE ls_dyntab-runmode.
+      WHEN 'R'.
+        SELECT purchaseordernumber,
+               material,
+               materialname,
+               baseunit,
+               plant,
+               storloc,
+               vendornumber,
+               vendorname,
+               vendorcity,
+               vendorcountry,
+               requirementdate,
+               ben,
+               bomhead,
+               bomitm,
+               compdesc,
+               shipto,
+               SUM( deliveryquantity ) AS deliveryquantity
+          FROM /rb1m/sd_availstock( p_werks = @ls_dyntab-plant,
+                                    p_vstel = @ls_dyntab-shippoint,
+                                    p_lgnum = @ls_dyntab-warehouno+0(3) )
+         WHERE vendornumber IN @lcl_buffer=>gt_r_vendor
+           AND purchaseordernumber IN @lcl_buffer=>gt_r_purord
+           AND requirementdate IN @lcl_buffer=>gt_r_reqdat
+           AND material IN @lcl_buffer=>gt_r_assepr
+           AND bomitm IN @lcl_buffer=>gt_r_compo
+         GROUP BY
+               purchaseordernumber,
+               material,
+               materialname,
+               baseunit,
+               plant,
+               storloc,
+               vendornumber,
+               vendorname,
+               vendorcity,
+               vendorcountry,
+               requirementdate,
+               ben,
+               bomhead,
+               bomitm,
+               compdesc,
+               shipto
+          INTO TABLE @DATA(lt_assembly)
+            UP TO @ls_dyntab-top ROWS.
+        IF sy-subrc = 0.
+          SORT lt_assembly BY vendornumber
+                              purchaseordernumber
+                              material
+                              bomhead
+                              bomitm
+                              baseunit
+                              storloc
+                              shipto.
+          DELETE ADJACENT DUPLICATES FROM lt_assembly COMPARING vendornumber
+                                                                purchaseordernumber
+                                                                material
+                                                                bomhead
+                                                                bomitm
+                                                                baseunit
+                                                                storloc
+                                                                shipto.
+
+          lcl_buffer=>gt_assembly = lt_assembly.
+
+          DATA(lt_assetmp) = lt_assembly.
+          SORT lt_assetmp BY bomitm ASCENDING.
+          DELETE ADJACENT DUPLICATES FROM lt_assetmp COMPARING bomitm.
+
+          lcl_buffer=>gt_r_compo = VALUE #( FOR <ls_assetmp> IN lt_assetmp ( sign = 'I'
+                                                                             option = 'EQ'
+                                                                             low = <ls_assetmp>-bomitm ) ).
+
+*         Get Demand data
+          SELECT material,
+                 SUM( requiredquantity ) AS requiredquantity,
+                 SUM( withdrawnquantity ) AS withdrawnquantity
+            FROM i_subcontractingcomponent WITH PRIVILEGED ACCESS
+           WHERE material IN @lcl_buffer=>gt_r_compo
+             AND plant = @ls_dyntab-plant
+             AND requirementdate IN @lcl_buffer=>gt_r_reqdat
+           GROUP BY
+                 material
+            INTO TABLE @DATA(lt_demand).
+          IF sy-subrc = 0.
+            SORT lt_demand BY material.
+          ENDIF.
+
+*         Get List of Component
+          SELECT matid,
+                 batch,
+                 warehousenumber,
+                 storagetype,
+                 storagebin,
+                 material,
+                 materialname,
+                 SUM( availablequantity ) AS availablequantity,
+                 baseunit,
+                 bomhead,
+                 SUM( hucount ) AS hucount
+            FROM /rb1m/sd_availstock_compo( p_werks = @ls_dyntab-plant,
+                                            p_lgnum = @ls_dyntab-warehouno )
+           WHERE storagetype IN @lcl_buffer=>gt_r_storty
+             AND storagebin IN @lcl_buffer=>gt_r_storbi
+             AND material IN @lcl_buffer=>gt_r_compo
+           GROUP BY
+                 matid,
+                 batch,
+                 warehousenumber,
+                 storagetype,
+                 storagebin,
+                 material,
+                 materialname,
+                 baseunit,
+                 bomhead
+            INTO TABLE @DATA(lt_componen).
+          IF sy-subrc = 0.
+            SORT lt_componen BY storagetype
+                                storagebin
+                                material
+                                batch.
+
+            lcl_buffer=>gt_componen = lt_componen.
+          ENDIF.
+
+*         Get Stock Vendor
+          CLEAR lt_assetmp.
+          lt_assetmp = lt_assembly.
+          SORT lt_assetmp BY bomitm
+                             plant
+                             vendornumber.
+          DELETE ADJACENT DUPLICATES FROM lt_assetmp COMPARING bomitm
+                                                               plant
+                                                               vendornumber.
+          SELECT matnr,
+                 werks,
+                 charg,
+                 lifnr,
+                 lblab
+            FROM mslb
+            INTO TABLE @DATA(lt_mslb)
+             FOR ALL ENTRIES IN @lt_assetmp
+           WHERE matnr = @lt_assetmp-bomitm
+             AND werks = @lt_assetmp-plant
+             AND sobkz = 'O'
+             AND lifnr = @lt_assetmp-vendornumber.
+          IF sy-subrc = 0.
+            SORT lt_mslb BY matnr
+                            werks
+                            lifnr.
+          ENDIF.
+        ELSE.
+          APPEND VALUE #( mainindex = 1
+                          msgindex = 1
+                          msgtype = 'S'
+                          msgno = 1
+                          msgcontent = 'Data not valid.'
+                          msgv1 = ''
+                          msgv2 = ''
+                          msgv3 = ''
+                          msgv4 = ''
+                         ) TO lcl_buffer=>gt_msgres.
+        ENDIF.
+
+*       Fill data to result
+        LOOP AT lt_assembly INTO DATA(ls_assembly).
+
+          lv_headidx = sy-tabix.
+
+          lv_stockven = REDUCE int4( INIT total = 0
+                                      FOR ls_mslb IN lt_mslb WHERE ( matnr = ls_assembly-bomitm
+                                                                 AND werks = ls_assembly-plant
+                                                                 AND lifnr = ls_assembly-vendornumber )
+                                     NEXT total = total + ls_mslb-lblab ).
+
+          lv_demand = REDUCE int4( INIT total = 0
+                                    FOR ls_demand IN lt_demand WHERE ( material = ls_assembly-bomitm )
+                                   NEXT total = total + ( ls_demand-requiredquantity - ls_demand-withdrawnquantity ) ).
+
+          lv_traffic = COND #( WHEN lv_stockven < lv_demand "ls_assembly-DemandQuantity
+                               THEN 'Error'
+                               ELSE 'Success' ).
+
+          lv_rootid = sy-tabix.
+          CONDENSE lv_rootid NO-GAPS.
+
+          DATA(lt_tempcom) = lt_componen.
+
+          DELETE lt_tempcom WHERE material NE ls_assembly-bomitm.
+          DELETE lt_tempcom WHERE bomhead NE ls_assembly-bomhead.
+
+*         Main data filling
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+            EXPORTING
+              input  = ls_assembly-material
+            IMPORTING
+              output = ls_assembly-material.
+
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+            EXPORTING
+              input  = ls_assembly-bomitm
+            IMPORTING
+              output = ls_assembly-bomitm.
+
+          CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+            EXPORTING
+              input  = ls_assembly-baseunit
+            IMPORTING
+              output = ls_assembly-baseunit.
+
+          lv_delvqty  = ls_assembly-deliveryquantity.
+
+          lv_hucount = REDUCE int4( INIT total = 0
+                                     FOR tempcom IN lt_tempcom
+                                    NEXT total = total + tempcom-hucount ).
+
+          lv_availqty = REDUCE int4( INIT total = 0
+                                      FOR tempcom IN lt_tempcom
+                                     NEXT total = total + tempcom-availablequantity ).
+
+          APPEND VALUE #( mainindex = 1
+                          headerindex = lv_headidx
+                          itemsindex = 1
+                          ismain = abap_true
+                          title = ''
+                          col1  = lv_traffic
+                          col2  = |{ ls_assembly-vendornumber ALPHA = OUT }|
+                          col3  = ls_assembly-vendorname
+                          col4  = ls_assembly-vendorcity
+                          col5  = ls_assembly-vendorcountry
+                          col6  = |{ ls_assembly-purchaseordernumber ALPHA = OUT }|
+                          col7  = ls_assembly-material
+                          col8  = ls_assembly-materialname
+                          col9  = ls_assembly-bomitm
+                          col10 = ls_assembly-compdesc
+                          col11 = lv_availqty
+                          col12 = ls_assembly-baseunit
+                          col13 = lv_hucount
+                          col14 = lv_stockven
+                          col15 = ''
+                          col16 = lv_demand
+                          col17 = |{ ls_assembly-shipto ALPHA = OUT }|
+                          action = ''
+                          rootid = lv_rootid
+                          parentid = '' ) TO result.
+          CLEAR:
+            lv_availqty,
+            lv_hucount,
+            lv_traffic.
+
+*         Sub data filling
+          LOOP AT lt_tempcom INTO DATA(ls_temcom).
+            DATA(lv_itemidx) = sy-tabix.
+            DATA(lv_itmdelv) = lv_delvqty.
+
+            lv_demand = lv_demand - lv_availqty.
+            IF lv_demand < 0.
+              lv_demand = 0.
+            ENDIF.
+
+            CLEAR lv_availqty.
+
+            lv_availqty = ls_temcom-availablequantity.
+            lv_hucount = ls_temcom-hucount.
+
+            IF lv_itmdelv > lv_availqty.
+              lv_itmdelv = lv_availqty.
+            ENDIF.
+
+            IF lv_demand < lv_availqty.
+              lv_itmdelv = lv_demand.
+            ENDIF.
+
+            IF lv_delvqty > lv_availqty.
+              lv_delvqty = lv_delvqty - lv_availqty.
+            ELSE.
+              lv_delvqty = 0.
+            ENDIF.
+
+            lv_delvqty_char = lv_itmdelv.
+            CONDENSE lv_delvqty_char NO-GAPS.
+
+            lv_traffic = COND #( WHEN ( lv_stockven + lv_itmdelv ) < lv_demand
+                               THEN 'Error'
+                               ELSE 'Success' ).
+
+            CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+              EXPORTING
+                input  = ls_temcom-material
+              IMPORTING
+                output = ls_temcom-material.
+
+            CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+              EXPORTING
+                input  = ls_temcom-baseunit
+              IMPORTING
+                output = ls_temcom-baseunit.
+
+            APPEND VALUE #( mainindex = 1
+                            headerindex = lv_headidx
+                            itemsindex = lv_itemidx
+                            ismain = abap_false
+                            title = ''
+                            col1  = lv_traffic
+                            col7  = |{ ls_temcom-storagetype ALPHA = OUT }|
+                            col8  = |{ ls_temcom-storagebin ALPHA = OUT }|
+                            col9  = ls_temcom-material
+                            col10 = ls_temcom-materialname
+                            col11 = lv_availqty
+                            col12 = ls_temcom-baseunit
+                            col13 = lv_hucount
+                            col14 = ls_temcom-batch
+                            col15 = '' "ls_temcom-ben
+                            col16 = lv_demand
+                            col17 = lv_delvqty_char
+                            action = ''
+                            rootid = ''
+                            parentid = lv_rootid
+                            editdelqty = abap_true ) TO result.
+            CLEAR:
+              lv_traffic,
+              lv_delvqty_char.
+          ENDLOOP.
+
+*         Created Deliveries filling
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+            EXPORTING
+              input        = ls_assembly-bomitm
+            IMPORTING
+              output       = ls_licom-matnr
+            EXCEPTIONS
+              length_error = 1
+              OTHERS       = 2.
+
+          ls_licom-lfart = 'YOLB'.
+          ls_licom-vstel = ls_dyntab-shippoint.
+          ls_licom-kunnr = ls_assembly-shipto.
+          ls_licom-zuart = 'A'.
+          ls_licom-vboff = 'X'.
+
+          CALL FUNCTION 'RV_DELIVERY_VIEW_2'
+            EXPORTING
+              licom   = ls_licom
+            TABLES
+              llimtv  = lt_limtv
+              lt_lips = lt_lips
+            EXCEPTIONS
+              OTHERS  = 1.
+          IF sy-subrc = 0.
+            DELETE lt_lips WHERE werks NE ls_dyntab-plant.
+
+            LOOP AT lt_lips INTO DATA(ls_lips).
+              LOOP AT lt_limtv INTO DATA(ls_limtv) WHERE vbeln = ls_lips-vbeln
+                                                     AND posnr = ls_lips-posnr.
+                CALL FUNCTION 'UNIT_CONVERSION'
+                  EXPORTING
+                    matnr   = ls_assembly-material
+                    meinh   = ls_limtv-vrkme
+                    meins   = ls_assembly-baseunit
+                    mgame   = ls_limtv-lfimg
+                  IMPORTING
+                    o_mglme = ls_limtv-lfimg
+                  EXCEPTIONS
+                    OTHERS  = 1.
+
+                CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+                  EXPORTING
+                    input  = ls_limtv-vrkme
+                  IMPORTING
+                    output = ls_limtv-vrkme.
+
+                WRITE ls_limtv-lfimg TO lv_delvqty_char DECIMALS 0.
+                CONDENSE lv_delvqty_char NO-GAPS.
+
+                APPEND VALUE #( mainindex = 1
+                                headerindex = lv_headidx
+                                itemsindex = lv_itemidx
+                                ismain = abap_false
+                                title = ''
+                                col1  = 'Success'
+                                col6  = |{ ls_lips-vbeln ALPHA = OUT }|
+                                col7  = |{ ls_lips-lgtyp ALPHA = OUT }|
+                                col8  = |{ ls_lips-lgpla ALPHA = OUT }|
+                                col9  = ls_assembly-bomitm
+                                col10 = ls_assembly-compdesc
+                                col11 = ''
+                                col12 = ls_limtv-vrkme
+                                col13 = ''
+                                col14 = ls_lips-charg "|{ ls_lips-charg ALPHA = OUT }|
+                                col15 = ''
+                                col16 = ''
+                                col17 = lv_delvqty_char
+                                action = ''
+                                rootid = ''
+                                parentid = lv_rootid
+                                editdelqty = abap_false ) TO result.
+
+                CLEAR:
+                  lv_delvqty_char.
+              ENDLOOP.
+            ENDLOOP.
+          ENDIF.
+
+          CLEAR:
+            lv_rootid,
+            lv_delvqty,
+            lv_stockven.
+
+          CLEAR:
+            lv_demand.
+        ENDLOOP.
+
+      WHEN 'C'.
+        result = CORRESPONDING #( lcl_buffer=>gt_items ).
+
+      WHEN OTHERS.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+  METHOD rba_vendornav.
+
+    result = VALUE #(
+          ( mainindex = 1
+            soindex = 1
+            sign = 'I'
+            optio = 'EQ'
+            low = 'Test1'
+            high = 'Test2' )
+        ).
+
+  ENDMETHOD.
+
+  METHOD rba_purordnav.
+
+    result = VALUE #(
+          ( mainindex = 1
+            soindex = 1
+            sign = 'I'
+            optio = 'EQ'
+            low = 'Test1'
+            high = 'Test2' )
+        ).
+
+  ENDMETHOD.
+
+  METHOD rba_reqdatnav.
+
+    result = VALUE #(
+          ( mainindex = 1
+            soindex = 1
+            sign = 'I'
+            optio = 'EQ'
+            low = 'Test1'
+            high = 'Test2' )
+        ).
+
+  ENDMETHOD.
+
+  METHOD rba_stortynav.
+
+    result = VALUE #(
+          ( mainindex = 1
+            soindex = 1
+            sign = 'I'
+            optio = 'EQ'
+            low = 'Test1'
+            high = 'Test2' )
+        ).
+
+  ENDMETHOD.
+
+  METHOD rba_storbinav.
+
+    result = VALUE #(
+          ( mainindex = 1
+            soindex = 1
+            sign = 'I'
+            optio = 'EQ'
+            low = 'Test1'
+            high = 'Test2' )
+        ).
+
+  ENDMETHOD.
+
+  METHOD rba_asseprnav.
+
+    result = VALUE #(
+          ( mainindex = 1
+            soindex = 1
+            sign = 'I'
+            optio = 'EQ'
+            low = 'Test1'
+            high = 'Test2' )
+        ).
+
+  ENDMETHOD.
+
+  METHOD rba_componav.
+
+    result = VALUE #(
+          ( mainindex = 1
+            soindex = 1
+            sign = 'I'
+            optio = 'EQ'
+            low = 'Test1'
+            high = 'Test2' )
+        ).
+
+  ENDMETHOD.
+
+  METHOD rba_message.
+
+    LOOP AT lcl_buffer=>gt_msgres INTO DATA(ls_msgres).
+      APPEND VALUE #( mainindex = ls_msgres-mainindex
+                      msgindex = ls_msgres-msgindex
+                      msgtype = ls_msgres-msgtype
+                      msgno = ls_msgres-msgno
+                      msgcontent = ls_msgres-msgcontent
+                      msgv1 = ls_msgres-msgv1
+                      msgv2 = ls_msgres-msgv2
+                      msgv3 = ls_msgres-msgv3
+                      msgv4 = ls_msgres-msgv4 ) TO result.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_header DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_header.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_header.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_header RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_header\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_header IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_items DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_items.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_items.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_items RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_items\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_items IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_vendorso DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_vendorso.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_vendorso.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_vendorso RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_vendorso\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_vendorso IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_purcordso DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_purcordso.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_purcordso.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_purcordso RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_purcordso\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_purcordso IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_reqdateso DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_reqdateso.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_reqdateso.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_reqdateso RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_reqdateso\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_reqdateso IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_stortypso DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_stortypso.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_stortypso.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_stortypso RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_stortypso\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_stortypso IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_storbinso DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_storbinso.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_storbinso.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_storbinso RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_storbinso\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_storbinso IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_asseprdso DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_asseprdso.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_asseprdso.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_asseprdso RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_asseprdso\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_asseprdso IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_composo DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_composo.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_composo.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_composo RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_composo\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_composo IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_msgres DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_msgres.
+
+    METHODS delete FOR MODIFY
+      IMPORTING keys FOR DELETE /rb1m/sd_c_msgres.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_msgres RESULT result.
+
+    METHODS rba_dyntab FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_msgres\_dyntab FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_msgres IMPLEMENTATION.
+
+  METHOD update.
+  ENDMETHOD.
+
+  METHOD delete.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_dyntab.
+  ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lsc_sd_c_dyntab DEFINITION INHERITING FROM cl_abap_behavior_saver.
+  PROTECTED SECTION.
+
+    METHODS finalize REDEFINITION.
+
+    METHODS check_before_save REDEFINITION.
+
+    METHODS save REDEFINITION.
+
+    METHODS cleanup REDEFINITION.
+
+    METHODS cleanup_finalize REDEFINITION.
+
+ENDCLASS.
+
+CLASS lsc_sd_c_dyntab IMPLEMENTATION.
+
+  METHOD finalize.
+  ENDMETHOD.
+
+  METHOD check_before_save.
+  ENDMETHOD.
+
+  METHOD save.
+
+    DATA:
+      lt_r_matnr   TYPE RANGE OF matnr,
+      ls_vbsk      TYPE vbsk,
+      lt_vbfs      TYPE TABLE OF vbfs,
+      lt_vbls      TYPE TABLE OF vbls,
+      lt_lips      TYPE TABLE OF lips,
+      lv_shipto    TYPE kunwe,
+      lv_numc10    TYPE numc10,
+      lt_komdlgn   TYPE TABLE OF komdlgn,
+      lv_matnr     TYPE matnr,
+      lv_lifnr     TYPE elifn,
+      lv_parenid   TYPE char10,
+      lv_index     TYPE i,
+      lv_vgpos     TYPE vgpos,
+      lv_ebeln     TYPE ebeln,
+      lv_ebeln_tmp TYPE ebeln.
+    DATA : lr_ebeln TYPE RANGE OF ebeln.
+    DATA(ls_dyntab) = lcl_buffer=>gs_dyntab.
+
+    CASE ls_dyntab-runmode.
+      WHEN 'C'.
+
+        SELECT SINGLE
+               plant,
+               salesorganization,
+               distributionchannel,
+               division
+          FROM i_plant
+          INTO @DATA(ls_plant)
+         WHERE plant = @ls_dyntab-plant.
+        IF sy-subrc <> 0.
+          CLEAR ls_plant.
+        ENDIF.
+*      Subcon item level
+        DATA(lt_itmtemp) = lcl_buffer=>gt_items.
+*      Collect all the Purchase Order...
+        LOOP AT lt_itmtemp INTO DATA(ls_tmp) WHERE col6 IS NOT INITIAL.
+          lv_ebeln = ls_tmp-col6.
+          APPEND VALUE #( sign = 'I'
+                          option = 'EQ'
+                          low = |{ lv_ebeln ALPHA = IN }| ) TO lr_ebeln.
+          CLEAR : lv_ebeln.
+        ENDLOOP.
+
+        IF lt_itmtemp IS NOT INITIAL.
+          SORT lt_itmtemp BY col9.
+          DELETE ADJACENT DUPLICATES FROM lt_itmtemp COMPARING col9.
+        ENDIF.
+
+
+        LOOP AT lt_itmtemp INTO DATA(ls_itmtemp).
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+            EXPORTING
+              input        = ls_itmtemp-col9
+            IMPORTING
+              output       = lv_matnr
+            EXCEPTIONS
+              length_error = 1
+              OTHERS       = 2.
+
+          APPEND VALUE #( sign = 'I'
+                          option = 'EQ'
+                          low = lv_matnr ) TO lt_r_matnr.
+
+
+          CLEAR: lv_matnr.
+        ENDLOOP.
+
+        SELECT matnr,
+               vtweg
+          FROM mvke
+          INTO TABLE @DATA(lt_mvke)
+         WHERE matnr IN @lt_r_matnr
+           AND vkorg =  @ls_plant-salesorganization.
+        IF sy-subrc = 0.
+          SORT lt_mvke BY matnr
+                          vtweg.
+        ENDIF.
+*       To get the Purchase Order Agreement
+        IF lr_ebeln IS NOT INITIAL.
+          SORT lr_ebeln BY low.
+          DELETE ADJACENT DUPLICATES FROM lr_ebeln.
+          SELECT ebeln, ebelp FROM ekpo
+                              WHERE ebeln IN @lr_ebeln
+                                AND loekz EQ ''
+                              INTO TABLE @DATA(lt_ekpo).
+
+          IF sy-subrc = 0.
+            SORT lt_ekpo BY ebeln ebelp.
+          ENDIF.
+        ENDIF.
+*       To populate VBSK table
+        ls_vbsk = VALUE #( mandt = sy-mandt
+                           ernam = sy-uname
+                           erdat = sy-datum
+                           uzeit = sy-uzeit
+                           smart = 'L' ).
+
+        LOOP AT lcl_buffer=>gt_items INTO DATA(ls_item) WHERE parentid NE space.
+          READ TABLE lcl_buffer=>gt_items INTO DATA(ls_head)
+            WITH KEY rootid = ls_item-parentid.
+          IF sy-subrc = 0.
+            lv_shipto = ls_head-col17.
+*           Purchase order Agreement
+            lv_ebeln_tmp = ls_head-col6.
+            DATA(lv_purchaseorder) = |{ lv_ebeln_tmp ALPHA = IN }|.
+          ENDIF.
+
+          CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+            EXPORTING
+              input        = ls_item-col9
+            IMPORTING
+              output       = lv_matnr
+            EXCEPTIONS
+              length_error = 1
+              OTHERS       = 2.
+
+          CALL FUNCTION 'CONVERSION_EXIT_CUNIT_INPUT'
+            EXPORTING
+              input  = ls_item-col12
+            IMPORTING
+              output = ls_item-col12.
+
+          READ TABLE lt_mvke INTO DATA(ls_mvke) BINARY SEARCH
+            WITH KEY matnr = lv_matnr.
+          IF sy-subrc <> 0.
+            CLEAR ls_mvke.
+          ENDIF.
+
+          lv_lifnr = |{ ls_head-col2 ALPHA = IN }|.
+          lv_shipto = |{ lv_shipto ALPHA = IN }|.
+          DATA(ls_ekpo) = VALUE #( lt_ekpo[ ebeln = lv_purchaseorder ] OPTIONAL ).
+          lv_vgpos = ls_ekpo-ebelp.
+          APPEND VALUE #( lifnr = lv_lifnr
+                          matnr = lv_matnr
+                          lgnum = ls_dyntab-warehouno
+                          werks = ls_dyntab-plant
+                          vstel = ls_dyntab-shippoint
+                          kunwe = lv_shipto
+                          charg = ls_item-col14
+                          lfimg = ls_item-col17
+                          vrkme = ls_item-col12
+                          lgort = '2000'
+                          lgtyp = ls_item-col7
+                          lgpla = ls_item-col8
+                          vkorg = ls_plant-salesorganization
+                          vtweg = ls_mvke-vtweg
+                          spart = ls_plant-division
+                          lfart = 'YOLB'
+*                          bwart = '541'
+                          kzazu = 'X'
+                          vgbel = ls_ekpo-ebeln
+                          vgpos = lv_vgpos
+                          vgtyp = 'V'
+                          wadat = sy-datlo
+*                          wauhr = sy-timlo
+                          lfdat = sy-datlo
+*                          lfuhr = sy-timlo
+                          ) TO lt_komdlgn.
+
+          CLEAR:
+                      ls_head,
+                      ls_mvke,
+                      lv_lifnr,
+                      lv_matnr,
+                      lv_shipto,
+                      lv_vgpos,
+                      lv_purchaseorder.
+
+        ENDLOOP.
+
+*       Create delivery will happen for one vendor and different materials
+        CALL FUNCTION 'GN_DELIVERY_CREATE' "#EC CI_USAGE_OK[2438131]
+          EXPORTING
+            vbsk_i         = ls_vbsk
+            vbls_pos_rueck = abap_true
+            no_commit      = abap_true
+            if_no_deque    = abap_true
+          TABLES
+            xkomdlgn       = lt_komdlgn
+            xvbfs          = lt_vbfs        " Error tab
+            xvbls          = lt_vbls
+            xxlips         = lt_lips        " Success tab
+          EXCEPTIONS
+            error_message  = 1
+            OTHERS         = 99.
+        IF sy-subrc = 0.
+*         Success cases
+          LOOP AT lt_lips INTO DATA(ls_lips).
+            lv_index = sy-tabix.
+
+            CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+              EXPORTING
+                input  = ls_lips-matnr
+              IMPORTING
+                output = lv_matnr.
+
+            READ TABLE lcl_buffer=>gt_items ASSIGNING FIELD-SYMBOL(<lfs_item>)
+              WITH KEY col9 = lv_matnr
+                       col7+0(3) = ls_lips-lgtyp
+                       col8+0(10) = ls_lips-lgpla.
+            IF <lfs_item> IS ASSIGNED.
+              <lfs_item>-col1 = 'Success'.
+              <lfs_item>-col6 = ls_lips-vbeln.
+              lv_parenid = <lfs_item>-parentid.
+            ENDIF.
+            UNASSIGN <lfs_item>.
+
+            READ TABLE lcl_buffer=>gt_items ASSIGNING <lfs_item>
+              WITH KEY col9 = lv_matnr
+                       rootid = lv_parenid.
+            IF <lfs_item> IS ASSIGNED.
+              <lfs_item>-col1 = 'Success'.
+            ENDIF.
+            UNASSIGN <lfs_item>.
+
+            APPEND VALUE #( mainindex = 1
+                            msgindex = sy-tabix
+                            msgtype = 'S'
+                            msgno = '000'
+                            msgcontent = |Delivery { ls_lips-vbeln } created successfull! |
+                            msgv1 = ls_lips-vbeln ) TO lcl_buffer=>gt_msgres.
+            CLEAR:
+              lv_matnr,
+              lv_parenid.
+          ENDLOOP.
+
+          DESCRIBE TABLE lt_lips LINES DATA(lv_tabix).
+
+          DATA lv_meins TYPE meins.
+
+*         Error cases
+          LOOP AT lt_vbfs INTO DATA(ls_vbfs).
+*            CALL FUNCTION 'CONVERSION_EXIT_MATN1_OUTPUT'
+*              EXPORTING
+*                input        = ls_vbfs-matnr
+*              IMPORTING
+*                output       = lv_matnr.
+*
+*            READ TABLE lcl_buffer=>gt_items ASSIGNING <lfs_item>
+*              WITH KEY Col9 = lv_matnr.
+**                       Col7 = ls_vbfs-lgtyp
+**                       Col8 = ls_vbfs-lgpla.
+*            IF <lfs_item> IS ASSIGNED.
+*              <lfs_item>-Col1 = 'Error'.
+*              lv_parenid = <lfs_item>-ParentId.
+*            ENDIF.
+*            UNASSIGN <lfs_item>.
+*
+*            READ TABLE lcl_buffer=>gt_items ASSIGNING <lfs_item>
+*              WITH KEY Col9 = lv_matnr
+*                       RootId = lv_parenid.
+*            IF <lfs_item> IS ASSIGNED.
+*              <lfs_item>-Col1 = 'Error'.
+*            ENDIF.
+*            UNASSIGN <lfs_item>.
+
+*           Check if UoM exist
+            lv_meins = ls_vbfs-msgv2.
+
+            CALL FUNCTION 'CONVERSION_EXIT_CUNIT_OUTPUT'
+              EXPORTING
+                input  = lv_meins
+              IMPORTING
+                output = lv_meins
+                         EXCEPTIONS
+                         unit_not_found.
+            IF sy-subrc = 0.
+              ls_vbfs-msgv2 = lv_meins.
+            ENDIF.
+
+            MESSAGE ID ls_vbfs-msgid
+               TYPE ls_vbfs-msgty
+             NUMBER ls_vbfs-msgno
+               INTO DATA(lv_message)
+               WITH ls_vbfs-msgv1
+                    ls_vbfs-msgv2
+                    ls_vbfs-msgv3
+                    ls_vbfs-msgv4.
+
+            APPEND VALUE #( mainindex = 1
+                            msgindex = ls_vbfs-zaehl + lv_tabix
+                            msgtype = ls_vbfs-msgty
+                            msgno = ls_vbfs-msgno
+                            msgcontent = lv_message
+                            msgv1 = ls_vbfs-msgv1
+                            msgv2 = ls_vbfs-msgv2
+                            msgv3 = ls_vbfs-msgv3
+                            msgv4 = ls_vbfs-msgv4 ) TO lcl_buffer=>gt_msgres.
+            CLEAR:
+              lv_matnr,
+              lv_parenid.
+          ENDLOOP.
+
+        ELSE.
+
+          APPEND VALUE #( mainindex = 1
+                          msgindex = 1
+                          msgtype = 'E'
+                          msgno = '000'
+                          msgcontent = 'Have error when running FM GN_DELIVERY_CREATE.'
+                          msgv1 = ls_lips-vbeln ) TO lcl_buffer=>gt_msgres.
+
+        ENDIF.
+
+      WHEN OTHERS.
+
+    ENDCASE.
+
+  ENDMETHOD.
+
+  METHOD cleanup.
+  ENDMETHOD.
+
+  METHOD cleanup_finalize.
+  ENDMETHOD.
+
+ENDCLASS.
+
+////Behaviour definition class
+unmanaged implementation in class /rb1m/cl_bp_sd_c_dyntab unique;
+strict ( 2 ); //Uncomment this line in order to enable strict mode 2. The strict mode has two variants (strict(1), strict(2)) and is prerequisite to be future proof regarding syntax and to be able to release your BO.
+
+define behavior for /RB1M/SD_C_DYNTAB //alias <alias_name>
+//late numbering
+lock master
+authorization master ( instance )
+//etag master <field_name>
+{
+  create;
+  update;
+  delete;
+  field ( readonly ) MainId;
+  association _HeaderNav { create; }
+  association _ItemsNav { create; }
+  association _VendorNav { create; }
+  association _PurOrdNav { create; }
+  association _ReqDatNav { create; }
+  association _StorTyNav { create; }
+  association _StorBiNav { create; }
+  association _AssePrNav { create; }
+  association _CompoNav { create; }
+  association _Message { create; }
+}
+
+define behavior for /RB1M/SD_C_HEADER //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, HeaderIndex, IsMain;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_ITEMS //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, HeaderIndex, ItemsIndex, IsMain;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_VENDORSO //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, SOIndex;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_PURCORDSO //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, SOIndex;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_REQDATESO //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, SOIndex;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_STORTYPSO //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, SOIndex;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_STORBINSO //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, SOIndex;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_ASSEPRDSO //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, SOIndex;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_COMPOSO //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, SOIndex;
+  association _DynTab;
+}
+
+define behavior for /RB1M/SD_C_MSGRES //alias <alias_name>
+//late numbering
+lock dependent by _DynTab
+authorization dependent by _DynTab
+//etag master <field_name>
+{
+  update;
+  delete;
+  field ( readonly ) MainIndex, MsgIndex;
+  association _DynTab;
+}
