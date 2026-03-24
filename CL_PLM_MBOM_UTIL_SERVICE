@@ -1,0 +1,1055 @@
+class /RB4R/CL_PLM_MBOM_UTIL_SERVICE definition
+  public
+  create public .
+
+public section.
+
+  types:
+    TT_RANGE_255 TYPE RANGE OF char255 .
+  types:
+    TT_TABFLT TYPE STANDARD TABLE OF /RB4R/PLM_TABFLT .
+  types:
+    TT_DD05Q TYPE STANDARD TABLE OF DD05Q .
+  types:
+    tt_aedt TYPE STANDARD TABLE OF aedt .
+  types:
+    tt_key_field TYPE STANDARD TABLE OF /rb4r/plmvckfs WITH DEFAULT KEY .
+
+  class-methods READ_MAST
+    importing
+      !IV_PLANT type WERKS_D optional
+      !IV_MATERIAL type MATNR optional
+      !IV_BOM_USAGE type STLAN optional
+      !IV_ALTERNATIVE type STLAL optional
+      !IV_BOM_NR type STNUM optional
+    exporting
+      !ET_MAST type WES_T_MAST
+    raising
+      /RB4R/CX_LO_PDPP_SEVM_2MSG_ERR .
+  class-methods READ_CHECK_TABLE_FIELD
+    importing
+      !IV_TABLE_NAME type CHAR30
+      !IV_TABLE_FIELD type CHAR30
+      !IV_TEXT_FIELD type CHAR30
+      !IV_IS_TEXT_TABLE type ABAP_BOOLEAN
+      !IS_DATA type ANY
+      !IV_WERKS type WERKS_D
+      !IV_MATNR type MATNR
+      !IV_STLAN type STLAN
+      !IV_STLAL type STLAL
+    exporting
+      !EV_MESSAGE type STRING
+      !EV_TEXT type STRING
+      !EV_CHECK_TABLE type CHAR30
+      !EV_TEXT_TABLE type CHAR30
+      !EV_LEGEND_FIELD type CHAR30 .
+  class-methods READ_TABLE_FILTER
+    importing
+      !IV_MSGCONFID type /RB4R/PLM_PDBB_MSGCONFID optional
+      !IV_TABLENAME type TABNAME optional
+    exporting
+      !ET_TABFLT type TT_TABFLT .
+  class-methods GENERATE_WHERE_CLAUSE_BY_FLT
+    importing
+      !IT_FILTER type TT_TABFLT
+      !IV_RANGETAB_FROM type I default 1
+      !IV_RANGETAB_NAME type CHAR30 optional
+    exporting
+      !ET_RANGE1 type TT_RANGE_255
+      !ET_RANGE2 type TT_RANGE_255
+      !ET_RANGE3 type TT_RANGE_255
+      !ET_RANGE4 type TT_RANGE_255
+      !ET_RANGE5 type TT_RANGE_255
+    changing
+      !CV_WHERE_CLAUSE type STRING .
+  class-methods FILTER_TABLE_BY_SETTING
+    importing
+      !IV_MSGCONFID type /RB4R/PLM_PDBB_MSGCONFID
+      !IV_TABLENAME type TABNAME
+    changing
+      !CT_TABLE type TABLE
+    raising
+      /RB4R/CX_LO_PDPP_SEVM_2MSG_ERR .
+  class-methods EXPAND_STRUCTURE_COMPONENTS
+    changing
+      !CT_COMP type ABAP_COMPONENT_TAB .
+  class-methods EXPORT_PAYLOAD_TO_FILE
+    importing
+      !IV_FILE_NAME type FCCX_PARAM_VAL_STRING
+      !IV_JSON type STRING
+    exporting
+      !EV_MESSAGE type CHAR512 .
+  class-methods GET_KEYS_BY_TABKEY
+    importing
+      !IV_TABKEY type CDTABKEY
+      !IV_TABNAME type TABNAME
+    returning
+      value(RT_KEYS) type /RB4R/PLM_PDBB_T_KEY_VALUE .
+  class-methods GET_PSOMR
+    importing
+      !IV_KEY_TYPE type /RB4R/PLM_PDBB_PSOMR_TYPE
+    returning
+      value(RT_RESULT) type /RB4R/PLM_T_PSOMR .
+protected section.
+
+  class-data MT_DD05Q type TT_DD05Q .
+  class-data MT_DYN_PRG_WHITLIST_TAB type STRING_HASHED_TABLE .
+  class-data MT_DYN_PRG_WHITLIST_FIELD type STRING_HASHED_TABLE .
+private section.
+ENDCLASS.
+
+
+
+CLASS /RB4R/CL_PLM_MBOM_UTIL_SERVICE IMPLEMENTATION.
+
+
+  METHOD expand_structure_components.
+    DATA: lt_comp_to_del TYPE abap_component_tab,
+          lt_comp        TYPE abap_component_tab,
+          lo_line_type   TYPE REF TO cl_abap_structdescr,
+          lt_sub_comp    TYPE abap_component_tab.
+
+    " components may have included strucutre. Such strucutre need to be expanded
+    IF line_exists( ct_comp[ as_include = abap_true ] ).
+      LOOP AT ct_comp ASSIGNING FIELD-SYMBOL(<ls_comp>).
+        CLEAR: lt_sub_comp.
+        IF <ls_comp>-type->kind EQ 'S' AND <ls_comp>-as_include = abap_true.
+          lo_line_type ?= <ls_comp>-type.
+          lt_sub_comp = lo_line_type->get_components( ).
+          expand_structure_components(
+            CHANGING
+              ct_comp = lt_sub_comp ).
+          APPEND LINES OF lt_sub_comp TO lt_comp.
+        ELSE.
+          APPEND <ls_comp> TO lt_comp.
+        ENDIF.
+      ENDLOOP.
+      ct_comp = lt_comp.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD export_payload_to_file.
+
+    DATA: lv_path      TYPE string,
+          xlm_xstring  TYPE xstring,
+          temptable    TYPE w3mimetabtype,
+          bin_filesize TYPE i.
+
+    IF iv_json IS NOT INITIAL AND iv_file_name IS NOT INITIAL.
+
+      CALL FUNCTION 'SCMS_STRING_TO_XSTRING'
+        EXPORTING
+          text   = iv_json
+        IMPORTING
+          buffer = xlm_xstring.
+
+      CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+        EXPORTING
+          buffer        = xlm_xstring
+        IMPORTING
+          output_length = bin_filesize
+        TABLES
+          binary_tab    = temptable.
+      lv_path = iv_file_name.
+      cl_gui_frontend_services=>gui_download(
+         EXPORTING
+           bin_filesize = bin_filesize
+           filename     = lv_path
+           filetype     = 'BIN'
+         CHANGING
+           data_tab     = temptable
+         EXCEPTIONS
+           file_write_error          = 1
+           no_batch                  = 2
+           gui_refuse_filetransfer   = 3
+           invalid_type              = 4
+           no_authority              = 5
+           unknown_error             = 6
+           header_not_allowed        = 7
+           separator_not_allowed     = 8
+           filesize_not_allowed      = 9
+           header_too_long           = 10
+           dp_error_create           = 11
+           dp_error_send             = 12
+           dp_error_write            = 13
+           unknown_dp_error          = 14
+           access_denied             = 15
+           dp_out_of_memory          = 16
+           disk_full                 = 17
+           dp_timeout                = 18
+           file_not_found            = 19
+           dataprovider_exception    = 20
+           control_flush_error       = 21
+           not_supported_by_gui      = 22
+           error_no_gui              = 23
+           OTHERS                    = 24
+      ).
+      IF sy-subrc EQ 0.
+        ev_message = /rb4r/if_plm_mbom_constant=>mc_file_write_error && |{ iv_file_name }|.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD filter_table_by_setting.
+
+********************************************************************************
+* How to use:
+* 1) Type of CT_TABLE must be a DDIC object
+********************************************************************************
+    DATA: lt_tabflt               TYPE STANDARD TABLE OF /rb4r/plm_tabflt,
+          ls_tabflt_group         TYPE /rb4r/plm_tabflt,
+          ls_tabflt               TYPE /rb4r/plm_tabflt,
+          lt_tabflt_5_fields      TYPE STANDARD TABLE OF /rb4r/plm_tabflt,
+          lt_tabflt_group         TYPE STANDARD TABLE OF /rb4r/plm_tabflt,
+          lv_where_clause         TYPE string,
+          lt_range1               TYPE RANGE OF char255,
+          lt_range2               TYPE RANGE OF char255,
+          lt_range3               TYPE RANGE OF char255,
+          lt_range4               TYPE RANGE OF char255,
+          lt_range5               TYPE RANGE OF char255,
+          lt_dyn_prg_whitlist_tab TYPE string_hashed_table,
+          lo_table                TYPE REF TO cl_abap_tabledescr,
+          lr_table                TYPE REF TO data,
+          lr_table_middle         TYPE REF TO data,
+          lr_table_final          TYPE REF TO data,
+          lt_dd03p                TYPE STANDARD TABLE OF dd03p.
+    FIELD-SYMBOLS: <lt_table>        TYPE STANDARD TABLE,
+                   <lt_table_middle> TYPE STANDARD TABLE,
+                   <lt_table_final>  TYPE STANDARD TABLE.
+
+    lo_table ?= cl_abap_datadescr=>describe_by_data( ct_table ).
+    CREATE DATA lr_table TYPE HANDLE lo_table.
+    CREATE DATA lr_table_middle TYPE HANDLE lo_table.
+    CREATE DATA lr_table_final TYPE HANDLE lo_table.
+    ASSIGN lr_table->* TO <lt_table>.
+    ASSIGN lr_table_middle->* TO <lt_table_middle>.
+    ASSIGN lr_table_final->* TO <lt_table_final>.
+
+    /rb4r/cl_plm_mbom_util_service=>read_table_filter(
+      EXPORTING
+        iv_msgconfid  = iv_msgconfid
+        iv_tablename  = iv_tablename
+      IMPORTING
+        et_tabflt     = lt_tabflt ).
+
+    IF lt_tabflt IS INITIAL.
+      " No configuration than do not process the filters
+      RETURN.
+    ENDIF.
+
+    TRY.
+        LOOP AT lt_tabflt INTO ls_tabflt.
+          cl_abap_dyn_prg=>check_table_name_str( val = ls_tabflt-tablename packages = '' ).
+          " check field name existence
+          CALL FUNCTION 'DD_TBFD_GET'
+            EXPORTING
+              tabl_name     = iv_tablename
+            TABLES
+              dd03p_tab_a   = lt_dd03p
+            EXCEPTIONS
+              illegal_value = 1
+              op_failure    = 2
+              OTHERS        = 3.
+          IF sy-subrc <> 0 OR NOT line_exists( lt_dd03p[ fieldname = ls_tabflt-fieldname ] ).
+            CLEAR ct_table.
+            RAISE EXCEPTION TYPE /rb4r/cx_lo_pdpp_sevm_2msg_err
+              EXPORTING
+                iv_msg_text = /rb4r/if_plm_mbom_constant=>mc_sql_injection
+                iv_part     = /rb4r/if_plm_sevm_dp_constant=>mc_string_body.
+            RETURN.
+          ENDIF.
+        ENDLOOP.
+      CATCH cx_abap_not_a_table cx_abap_invalid_name cx_abap_not_in_package.
+        CLEAR ct_table.
+        RAISE EXCEPTION TYPE /rb4r/cx_lo_pdpp_sevm_2msg_err
+          EXPORTING
+            iv_msg_text = /rb4r/if_plm_mbom_constant=>mc_sql_injection
+            iv_part     = /rb4r/if_plm_sevm_dp_constant=>mc_string_body.
+        RETURN.
+    ENDTRY.
+
+    " Each group will be considered as a seprated iteration of input table, the final result combines each group
+    LOOP AT lt_tabflt INTO ls_tabflt_group GROUP BY ( filter_group = ls_tabflt_group-filter_group )
+      ASSIGNING FIELD-SYMBOL(<lr_group>).
+
+      <lt_table_middle> = ct_table.
+
+*      LOOP AT GROUP <lr_group> ASSIGNING FIELD-SYMBOL(<ls_filter>).
+*        APPEND <ls_filter> TO lt_tabflt_group.
+*      ENDLOOP.
+
+      " Execution of each group
+      LOOP AT GROUP <lr_group> ASSIGNING FIELD-SYMBOL(<ls_filter>).
+        APPEND <ls_filter> TO lt_tabflt_5_fields.
+
+        IF ( sy-tabix MOD 5 ) = 0.
+          " for each 5 fields, filter together
+          /rb4r/cl_plm_mbom_util_service=>generate_where_clause_by_flt(
+            EXPORTING
+              it_filter        = lt_tabflt_5_fields
+              iv_rangetab_name = 'LT_RANGE'
+            IMPORTING
+              et_range1        = lt_range1
+              et_range2        = lt_range2
+              et_range3        = lt_range3
+              et_range4        = lt_range4
+              et_range5        = lt_range5
+            CHANGING
+              cv_where_clause  = lv_where_clause ).
+          INSERT condense( lv_where_clause ) INTO TABLE lt_dyn_prg_whitlist_tab.
+          TRY." ATC....
+              lv_where_clause = cl_abap_dyn_prg=>check_whitelist_tab( val        = lv_where_clause
+                                                                      whitelist  = lt_dyn_prg_whitlist_tab ).
+            CATCH cx_abap_not_in_whitelist.
+              CLEAR ct_table.
+              RAISE EXCEPTION TYPE /rb4r/cx_lo_pdpp_sevm_2msg_err
+                EXPORTING
+                  iv_msg_text = /rb4r/if_plm_mbom_constant=>mc_sql_injection
+                  iv_part     = /rb4r/if_plm_sevm_dp_constant=>mc_string_body.
+              RETURN.
+          ENDTRY.
+          LOOP AT <lt_table_middle> ASSIGNING FIELD-SYMBOL(<ls_table_line>) WHERE (lv_where_clause). " CT_TABLE->replace with middle table
+            <ls_table_line> = <ls_table_line>. "ATC
+            APPEND <ls_table_line> TO <lt_table>.
+          ENDLOOP.
+          <lt_table_middle> = <lt_table>. " CT_TABLE->replace with middle table
+
+          " clear
+          CLEAR: <lt_table>, lt_range1, lt_range2, lt_range3, lt_range4, lt_range5, lt_tabflt_5_fields, lv_where_clause.
+        ENDIF.
+
+      ENDLOOP.
+
+      " the remaining filter settings
+      IF lt_tabflt_5_fields IS NOT INITIAL.
+        /rb4r/cl_plm_mbom_util_service=>generate_where_clause_by_flt(
+          EXPORTING
+            it_filter        = lt_tabflt_5_fields
+            iv_rangetab_name = 'LT_RANGE'
+          IMPORTING
+            et_range1        = lt_range1
+            et_range2        = lt_range2
+            et_range3        = lt_range3
+            et_range4        = lt_range4
+            et_range5        = lt_range5
+          CHANGING
+            cv_where_clause  = lv_where_clause ).
+        INSERT condense( lv_where_clause ) INTO TABLE lt_dyn_prg_whitlist_tab.
+        TRY." ATC....
+            lv_where_clause = cl_abap_dyn_prg=>check_whitelist_tab( val        = lv_where_clause
+                                                                    whitelist  = lt_dyn_prg_whitlist_tab ).
+          CATCH cx_abap_not_in_whitelist.
+            CLEAR ct_table.
+            RAISE EXCEPTION TYPE /rb4r/cx_lo_pdpp_sevm_2msg_err
+              EXPORTING
+                iv_msg_text = /rb4r/if_plm_mbom_constant=>mc_sql_injection
+                iv_part     = /rb4r/if_plm_sevm_dp_constant=>mc_string_body.
+            RETURN.
+        ENDTRY.
+        LOOP AT <lt_table_middle> ASSIGNING <ls_table_line> WHERE (lv_where_clause). " use the middle table
+          <ls_table_line> = <ls_table_line>. "ATC
+          APPEND <ls_table_line> TO <lt_table>.
+        ENDLOOP.
+      ELSE.
+        <lt_table> = <lt_table_middle>.
+      ENDIF.
+
+      APPEND LINES OF <lt_table> TO <lt_table_final>.
+      CLEAR: lt_tabflt_group, <lt_table_middle>, <lt_table>, lt_tabflt_5_fields, lv_where_clause.
+
+    ENDLOOP.
+
+    ct_table = <lt_table_final>.
+    SORT ct_table.
+    DELETE ADJACENT DUPLICATES FROM ct_table.
+
+  ENDMETHOD.
+
+
+  METHOD generate_where_clause_by_flt.
+********************************************************************************
+* How to use:
+* 1) Make sure the name of range tables retruned by the method should be the same
+* in the where clause.
+* 2) The maxium number of each run should not exceed 5 fields. Parameter
+* IV_RANGETAB_FROM indicates the first range table number of retrun, like,
+* lt_range1, while IV_RANGETAB_FROM = 1.
+* 3) Run the method twice when there are more than 5 fields configed
+********************************************************************************
+    DATA: ls_filter                TYPE /rb4r/plm_tabflt,
+          lt_filter                TYPE tt_tabflt,
+          ls_range                 LIKE LINE OF et_range1,
+          lt_range                 TYPE tt_range_255,
+          lv_range_name            TYPE string,
+          lv_range_name_calculated TYPE string,
+          lv_field_cnt             TYPE i,
+          lv_field_cnt_c           TYPE char2,
+          lv_start                 TYPE i.
+
+    CONSTANTS: lc_range_tab TYPE string VALUE 'LT_RANGE'.
+
+    CLEAR: et_range1, et_range2, et_range3, et_range4, et_range5, cv_where_clause.
+
+    " check the only config id, one table
+    lt_filter = it_filter.
+    SORT lt_filter BY msgconfid tablename.
+    DELETE ADJACENT DUPLICATES FROM lt_filter COMPARING msgconfid tablename.
+    IF lines( lt_filter ) > 1.
+      CLEAR cv_where_clause.
+      RETURN.
+    ENDIF.
+
+    " range table number from
+    IF iv_rangetab_from = 0.
+      lv_start = 1.
+    ELSE.
+      lv_start = iv_rangetab_from.
+    ENDIF.
+
+    " range table name
+    IF iv_rangetab_name IS INITIAL.
+      lv_range_name = lc_range_tab.
+    ELSE.
+      lv_range_name = iv_rangetab_name.
+    ENDIF.
+
+    LOOP AT it_filter INTO ls_filter GROUP BY ( msgconfid = ls_filter-msgconfid tablename = ls_filter-tablename fieldname = ls_filter-fieldname )
+      ASSIGNING FIELD-SYMBOL(<lr_group>).
+
+      " 5 fields utmost
+      IF lv_field_cnt = 0.
+        lv_field_cnt = lv_start.
+      ELSE.
+        lv_field_cnt = lv_field_cnt + 1.
+      ENDIF.
+
+      IF  ( lv_field_cnt - lv_start + 1 ) > 5.
+        CLEAR cv_where_clause.
+        EXIT.
+      ENDIF.
+
+      " compose range table
+      CLEAR lt_range.
+      LOOP AT GROUP <lr_group> ASSIGNING FIELD-SYMBOL(<ls_filter>).
+        CASE <ls_filter>-opt.
+          WHEN 'NE'.
+            " NE is special
+            ls_range-sign = 'E'.
+            ls_range-option = 'EQ'.
+          WHEN OTHERS.
+            ls_range-sign = 'I'.
+            ls_range-option = <ls_filter>-opt.
+        ENDCASE.
+
+        ls_range-low = <ls_filter>-value.
+        APPEND ls_range TO lt_range.
+      ENDLOOP.
+
+      " fill retrun tables
+      CASE lv_field_cnt - lv_start + 1.
+        WHEN 1.
+          et_range1 = lt_range.
+        WHEN 2.
+          et_range2 = lt_range.
+        WHEN 3.
+          et_range3 = lt_range.
+        WHEN 4.
+          et_range4 = lt_range.
+        WHEN 5.
+        WHEN OTHERS.
+          CLEAR cv_where_clause.
+          EXIT.
+      ENDCASE.
+      lv_field_cnt_c = lv_field_cnt.
+      CONCATENATE lv_range_name lv_field_cnt_c INTO lv_range_name_calculated.
+
+      " compose where clause
+      IF cv_where_clause IS NOT INITIAL.
+        cv_where_clause = | { cv_where_clause } | && 'AND' && | { <ls_filter>-fieldname } | && 'IN' && | { lv_range_name_calculated } |.
+      ELSE.
+        cv_where_clause =  | { <ls_filter>-fieldname } | && 'IN' && | { lv_range_name_calculated } |.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD get_keys_by_tabkey.
+    DATA: lt_key_field TYPE /rb4r/plm_t_psomr,
+          lv_pos       TYPE i.
+
+    CASE iv_tabname.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_aenr.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_aenr ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aennr field_length = 12 field_type = 'C' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_aeoi.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_aeoi ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aennr field_length = 12 field_type = 'C' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_aedt.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_aedt ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aennr field_length = 12 field_type = 'C' )
+                        ( kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aedtz field_length = 3 field_type = 'C' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stko.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_stko ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 field_type = 'C' )
+                        ( kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 field_type = 'C' )
+                        ( kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlal field_length = 2 field_type = 'C' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stpo.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_stpo ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 field_type = 'C' )
+                        ( kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 field_type = 'C' )
+                        ( kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlkn field_length = 8 field_type = 'N' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_mast.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_mast ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_matnr field_length = 40 field_type = 'C' )
+                        ( kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_werks field_length = 4 field_type = 'C' )
+                        ( kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlan field_length = 1 field_type = 'C' )
+                        ( kfid = '50' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 field_type = 'C' )
+                        ( kfid = '60' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlal field_length = 2 field_type = 'C' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stpu.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_stpu ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 field_type = 'C' )
+                        ( kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 field_type = 'C' )
+                        ( kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlkn field_length = 8 field_type = 'N' )
+                        ( kfid = '50' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stpoz field_length = 8 field_type = 'N' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stzu.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_stzu ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 field_type = 'C' )
+                        ( kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 field_type = 'C' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stas.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_stas ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 field_type = 'C' )
+                        ( kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 field_type = 'C' )
+                        ( kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlal field_length = 2 field_type = 'C' )
+                        ( kfid = '50' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlkn field_length = 8 field_type = 'N' ) ).
+        ENDIF.
+      WHEN /rb4r/if_plm_mbom_constant=>mc_tab_mara.
+        lt_key_field  = get_psomr( /rb4r/if_plm_mbom_constant=>mc_tab_mara ).
+        IF lt_key_field IS INITIAL.
+          lt_key_field = VALUE tt_key_field(
+                        ( kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 field_type = 'C' )
+                        ( kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_matnr field_length = 40 field_type = 'C' ) ).
+        ENDIF.
+      WHEN OTHERS.
+    ENDCASE.
+
+    "Split table key into an internal table
+    CLEAR rt_keys.
+    SORT lt_key_field BY kfid ASCENDING.
+    LOOP AT lt_key_field ASSIGNING FIELD-SYMBOL(<ls_ckfs>).
+      APPEND INITIAL LINE TO rt_keys ASSIGNING FIELD-SYMBOL(<ls_key>).
+      <ls_key>-field_name = <ls_ckfs>-field_name.
+      <ls_key>-field_value = iv_tabkey+lv_pos(<ls_ckfs>-field_length).
+      lv_pos = lv_pos + <ls_ckfs>-field_length.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD get_psomr.
+    SELECT *
+      FROM /rb4r/plm_psomr
+      WHERE parsing_key_type = @iv_key_type
+      INTO TABLE @rt_result.
+    IF sy-subrc NE 0.
+      CASE iv_key_type.
+        WHEN /rb4r/cl_plm_sevm_obj2msg_cma=>mc_materialboms.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_matnr field_length = 40 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_werks field_length = 4 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlan field_length = 1 ) ).
+        WHEN /rb4r/cl_plm_sevm_obj2msg_cma=>mc_materialboms_new.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_matnr field_length = 40 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_werks field_length = 4 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlan field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlal field_length = 2 ) ).
+        WHEN /rb4r/cl_plm_sevm_obj2msg_cma=>mc_documentboms.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_dokar field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_doknr field_length = 25 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_dokvr field_length = 2 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_doktl field_length = 3 ) ).
+        WHEN /rb4r/cl_plm_sevm_obj2msg_cma=>mc_documents.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_dokar field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_doknr field_length = 25 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_dokvr field_length = 2 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_doktl field_length = 3 ) ).
+        WHEN /rb4r/cl_plm_sevm_obj2msg_cma=>mc_materials.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_matnr field_length = 40 ) ).
+        WHEN /rb4r/cl_plm_sevm_obj2msg_cma=>mc_aetyp_mbom.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = 'TYPE' field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 ) ).
+        WHEN /rb4r/cl_plm_sevm_obj2msg_cma=>mc_aetyp_doc.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_dokar field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_doknr field_length = 25 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_dokvr field_length = 2 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_doktl field_length = 3 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_aenr.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aennr field_length = 12 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_aeoi.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aennr field_length = 12 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_aedt.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aennr field_length = 12 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_aedtz field_length = 3 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stko.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlal field_length = 2 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stpo.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlkn field_length = 8 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_mast.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_matnr field_length = 40 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_werks field_length = 4 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlan field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '50' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '60' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlal field_length = 2 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stpu.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlkn field_length = 8 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '50' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stpoz field_length = 8 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stzu.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_stas.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlty field_length = 1 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '30' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlnr field_length = 8 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '40' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlal field_length = 2 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '50' field_name = /rb4r/if_plm_mbom_constant=>mc_field_stlkn field_length = 8 ) ).
+        WHEN /rb4r/if_plm_mbom_constant=>mc_tab_mara.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = /rb4r/if_plm_mbom_constant=>mc_field_mandt field_length = 3 )
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '20' field_name = /rb4r/if_plm_mbom_constant=>mc_field_matnr field_length = 40 ) ).
+        WHEN OTHERS.
+          rt_result = VALUE /rb4r/plm_t_psomr(
+                        ( mandt = sy-mandt parsing_key_type = iv_key_type kfid = '10' field_name = 'KEY' field_length = 90 ) ).
+      ENDCASE.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD read_check_table_field.
+
+    DATA: lt_dd05q               TYPE tt_dd05q,
+          ls_dd05q               TYPE dd05q,
+          ls_condition           TYPE hrcond,
+          lr_chktab              TYPE REF TO data,
+          lt_condition           TYPE STANDARD TABLE OF hrcond,
+          lv_texttab_name        TYPE char30,
+          lv_check_table         TYPE char30,
+          lv_textfld_name        TYPE char30,
+          lv_where               TYPE string,
+          lv_text_field          TYPE char30,
+          lt_empty_package_table TYPE string_hashed_table.
+
+    FIELD-SYMBOLS:
+      <ls_chk_table>    TYPE any,
+      <ls_source_table> TYPE any,
+      <lv_field>        TYPE any.
+
+    CLEAR: ev_text, ev_check_table.
+
+    ev_message = /rb4r/if_plm_mbom_constant=>mc_msg_text_table_read_error.
+    REPLACE /rb4r/if_plm_sevm_dp_constant=>mc_string_and1 IN ev_message WITH iv_table_name.
+    REPLACE /rb4r/if_plm_sevm_dp_constant=>mc_string_and2 IN ev_message WITH iv_table_field.
+
+    " Get foreign keys of the input table&field
+    IF line_exists( mt_dd05q[ tabname = iv_table_name fieldname = iv_table_field ] ).
+      LOOP AT mt_dd05q INTO ls_dd05q WHERE tabname = iv_table_name AND fieldname = iv_table_field.
+        ls_dd05q-tabname = ls_dd05q-tabname. "ATC
+        APPEND ls_dd05q TO lt_dd05q.
+      ENDLOOP.
+    ELSE.
+      SELECT *
+        FROM dd05q
+        INTO TABLE lt_dd05q
+        WHERE tabname = iv_table_name
+        AND fieldname = iv_table_field.       "#EC CI_SUBRC
+      IF lt_dd05q IS NOT INITIAL.
+        APPEND LINES OF lt_dd05q TO mt_dd05q.
+      ENDIF.
+    ENDIF.
+    SORT lt_dd05q BY primpos ASCENDING.
+
+    " compose query of check table
+    ASSIGN is_data TO <ls_source_table>.
+    CLEAR: lt_condition.
+    LOOP AT lt_dd05q INTO ls_dd05q WHERE forkey NE 'MANDT' OR checkfield NE 'MANDT'.
+      ls_condition-field = ls_dd05q-checkfield.
+      ls_condition-field = cl_abap_dyn_prg=>escape_quotes( ls_condition-field ).
+      ls_condition-field = cl_abap_dyn_prg=>escape_quotes_str( ls_condition-field ).
+      ls_condition-opera = 'EQ'.
+
+      IF ls_dd05q-forkey IS INITIAL.
+        CASE ls_dd05q-checkfield.
+          WHEN 'MATNR'.
+            ls_condition-low = iv_matnr.  "#EC CI_FLDEXT_OK[2215424]
+          WHEN 'STLAN'.
+            ls_condition-low = iv_stlan.  "#EC CI_FLDEXT_OK[2215424]
+          WHEN 'WERKS'.
+            ls_condition-low = iv_werks.  "#EC CI_FLDEXT_OK[2215424]
+          WHEN 'STLAL'.
+            ls_condition-low = iv_stlal.  "#EC CI_FLDEXT_OK[2215424]
+          WHEN OTHERS.
+            CLEAR ls_condition.
+            CONTINUE.
+        ENDCASE.
+      ELSE.
+        ASSIGN COMPONENT ls_dd05q-forkey OF STRUCTURE <ls_source_table> TO <lv_field>.
+        ls_condition-low = <lv_field>.
+      ENDIF.
+
+      ls_condition-low = cl_abap_dyn_prg=>escape_quotes( ls_condition-low ).
+      ls_condition-low = cl_abap_dyn_prg=>escape_quotes_str( ls_condition-low ).
+
+      APPEND ls_condition TO lt_condition.
+    ENDLOOP.
+    lv_check_table = ls_dd05q-checktable.
+    lv_text_field = iv_text_field.
+
+    LOOP AT lt_condition INTO ls_condition.
+      IF sy-tabix = 1.
+        lv_where = ls_condition-field && ` ` && ls_condition-opera && ` ` && cl_abap_dyn_prg=>quote( val = ls_condition-low ) .
+      ELSE.
+        lv_where = lv_where && ` ` && 'AND' && ` ` && ls_condition-field && ` ` && ls_condition-opera && ` ` && cl_abap_dyn_prg=>quote( val = ls_condition-low ) .
+      ENDIF.
+    ENDLOOP.
+
+    INSERT condense( lv_check_table ) INTO TABLE mt_dyn_prg_whitlist_tab.
+    TRY." ATC....
+        lv_check_table = cl_abap_dyn_prg=>check_table_name_tab( val      = lv_check_table
+                                                                packages = lt_empty_package_table ).
+        lv_check_table = cl_abap_dyn_prg=>check_whitelist_tab( val        = lv_check_table
+                                                               whitelist  = mt_dyn_prg_whitlist_tab ).
+      CATCH cx_abap_not_in_package INTO DATA(lx_not_in_package).
+        ev_message = lx_not_in_package->get_text( ).
+        RETURN.
+      CATCH cx_abap_not_a_table INTO DATA(lx_not_a_table).
+        ev_message = lx_not_a_table->get_text( ).
+        RETURN.
+      CATCH cx_abap_not_in_whitelist INTO DATA(lx_not_in_whitelist).
+        ev_message = lx_not_in_whitelist->get_text( ).
+        RETURN.
+    ENDTRY.
+
+    ev_check_table = lv_check_table.
+    CREATE DATA lr_chktab TYPE (lv_check_table).
+    ASSIGN lr_chktab->* TO <ls_chk_table>.
+
+    TRY.
+        SELECT SINGLE *                                  "#EC CI_DYNTAB
+         INTO <ls_chk_table>                             "#EC CI_DYNTAB
+         FROM (lv_check_table)                           "#EC CI_DYNTAB
+          WHERE (lv_where).                              "#EC CI_DYNTAB "#EC CI_SUBRC "#EC CI_DYNWHERE
+      CATCH cx_sy_dynamic_osql_error INTO DATA(lx_dynamic_osql_error).
+        ev_message = lx_dynamic_osql_error->get_text( ).
+        RETURN.
+    ENDTRY.
+    " text table exists?
+    IF iv_is_text_table = abap_true.
+
+      CLEAR: lt_dd05q, ls_dd05q.
+      CALL FUNCTION 'DDUT_TEXTTABLE_GET'
+        EXPORTING
+          tabname    = lv_check_table
+        IMPORTING
+          texttable  = lv_texttab_name
+          checkfield = lv_textfld_name.
+      IF iv_table_field = 'MEINS' OR iv_table_field = 'ROMEI' OR iv_table_field = 'BMEIN'.
+        ev_legend_field = lv_textfld_name.
+      ELSE.
+        ev_legend_field = iv_table_field.
+      ENDIF.
+
+      IF line_exists( mt_dd05q[ fortable = lv_texttab_name forkey = lv_textfld_name ] ).
+        LOOP AT mt_dd05q INTO ls_dd05q WHERE fortable = lv_texttab_name AND forkey = lv_textfld_name.
+          ls_dd05q-fortable = ls_dd05q-fortable. "ATC
+          APPEND ls_dd05q TO lt_dd05q.
+        ENDLOOP.
+      ELSE.
+        SELECT fortable
+               forkey
+          FROM dd05q
+          INTO CORRESPONDING FIELDS OF TABLE lt_dd05q
+          WHERE tabname = lv_texttab_name
+           AND fieldname = lv_textfld_name.                   "#EC CI_SUBRC
+        IF lt_dd05q IS NOT INITIAL.
+          APPEND LINES OF lt_dd05q TO mt_dd05q.
+        ENDIF.
+      ENDIF.
+
+      CLEAR: lt_condition, lv_where.
+      LOOP AT lt_dd05q INTO ls_dd05q WHERE forkey NE 'MANDT' OR checkfield NE 'MANDT'.
+
+        ls_condition-field = ls_dd05q-forkey.
+        ls_condition-field = cl_abap_dyn_prg=>escape_quotes( ls_condition-field ).
+        ls_condition-field = cl_abap_dyn_prg=>escape_quotes_str( ls_condition-field ).
+        ls_condition-opera = 'EQ'.
+        IF ls_dd05q-forkey = 'MANDT'.
+          ls_condition-low = sy-mandt.
+        ELSE.
+          ASSIGN COMPONENT ls_dd05q-forkey OF STRUCTURE <ls_chk_table> TO <lv_field>.
+          ls_condition-low = <lv_field>.
+          ls_condition-low = cl_abap_dyn_prg=>escape_quotes( ls_condition-low ).
+          ls_condition-low = cl_abap_dyn_prg=>escape_quotes_str( ls_condition-low ).
+        ENDIF.
+        APPEND ls_condition TO lt_condition.
+
+      ENDLOOP.
+      " Add language key
+      IF iv_table_field = 'SANKA'.
+        ls_condition-field = 'LANGU'.
+      ELSE.
+        ls_condition-field = 'SPRAS'.
+      ENDIF.
+      ls_condition-opera = 'EQ'.
+      ls_condition-low = sy-langu.
+      ls_condition-low = cl_abap_dyn_prg=>escape_quotes( ls_condition-low ).
+      ls_condition-low = cl_abap_dyn_prg=>escape_quotes_str( ls_condition-low ).
+      APPEND ls_condition TO lt_condition.
+
+*      CALL FUNCTION 'RH_DYNAMIC_WHERE_BUILD'
+*        EXPORTING
+*          dbtable         = space " can be empty
+*        TABLES
+*          condtab         = lt_condition
+*          where_clause    = gt_where_clauses
+*        EXCEPTIONS
+*          empty_condtab   = 01
+*          no_db_field     = 02
+*          unknown_db      = 03
+*          wrong_condition = 04.
+*      IF sy-subrc = 0.
+*        RETURN.
+*      ENDIF.
+      LOOP AT lt_condition INTO ls_condition.
+        IF sy-tabix = 1.
+          lv_where = ls_condition-field && ` ` && ls_condition-opera && ` ` && cl_abap_dyn_prg=>quote( val = ls_condition-low ) .
+        ELSE.
+          lv_where = lv_where && ` ` && 'AND' && ` ` && ls_condition-field && ` ` && ls_condition-opera && ` ` && cl_abap_dyn_prg=>quote( val = ls_condition-low ) .
+        ENDIF.
+      ENDLOOP.
+      lv_where = cl_abap_dyn_prg=>escape_quotes_str( lv_where ).
+      INSERT condense( lv_texttab_name ) INTO TABLE mt_dyn_prg_whitlist_tab.
+      INSERT condense( lv_text_field ) INTO TABLE mt_dyn_prg_whitlist_field.
+      TRY. "ATC...
+          lv_texttab_name = cl_abap_dyn_prg=>check_whitelist_tab( val       = lv_texttab_name
+                                                                  whitelist = mt_dyn_prg_whitlist_tab ).
+          lv_text_field = cl_abap_dyn_prg=>check_column_name( val = lv_text_field ).
+          lv_text_field = cl_abap_dyn_prg=>check_whitelist_tab( val       = lv_text_field
+                                                                whitelist = mt_dyn_prg_whitlist_field ).
+        CATCH cx_abap_invalid_name INTO DATA(lx_invalid_name).
+          ev_message = lx_invalid_name->get_text( ).
+          RETURN.
+        CATCH cx_abap_not_in_whitelist INTO lx_not_in_whitelist.
+          ev_message = lx_not_in_whitelist->get_text( ).
+          RETURN.
+        CATCH cx_abap_not_a_table INTO lx_not_a_table.
+          ev_message = lx_not_a_table->get_text( ).
+          RETURN.
+      ENDTRY.
+
+      TRY.
+          SELECT SINGLE (lv_text_field)                  "#EC CI_DYNTAB
+            INTO ev_text                                 "#EC CI_DYNTAB
+            FROM (lv_texttab_name)                       "#EC CI_DYNTAB
+            WHERE (lv_where).                            "#EC CI_DYNTAB "#EC CI_SUBRC "#EC CI_DYNWHERE
+        CATCH cx_sy_dynamic_osql_error INTO lx_dynamic_osql_error.
+          ev_message = lx_dynamic_osql_error->get_text( ).
+          RETURN.
+      ENDTRY.
+      ev_text_table = lv_texttab_name.
+    ELSE.
+      " text field is in the check table
+      ASSIGN COMPONENT iv_text_field OF STRUCTURE <ls_chk_table> TO <lv_field>.
+      IF sy-subrc EQ 0.
+        ev_text = <lv_field>.
+      ENDIF.
+      ev_text_table = ev_check_table.
+      ev_legend_field = iv_table_field.
+    ENDIF.
+
+    CLEAR ev_message.
+
+  ENDMETHOD.
+
+
+METHOD read_mast.
+
+  DATA: lv_material    TYPE matnr,
+        lt_mast        TYPE wes_t_mast,
+        lv_log         TYPE string,
+        lv_keys        TYPE string,
+        lt_material    TYPE STANDARD TABLE OF rsdsselopt_255,
+        lt_plant       TYPE STANDARD TABLE OF rsdsselopt_255,
+        lt_bom_usage   TYPE STANDARD TABLE OF rsdsselopt_255,
+        lt_bom_nr      TYPE STANDARD TABLE OF rsdsselopt_255,
+        lt_alternative TYPE STANDARD TABLE OF rsdsselopt_255.
+
+  CLEAR: et_mast.
+
+  CALL FUNCTION 'CONVERSION_EXIT_MATN1_INPUT'
+    EXPORTING
+      input        = iv_material
+    IMPORTING
+      output       = lv_material
+    EXCEPTIONS
+      length_error = 1
+      OTHERS       = 2.
+  IF sy-subrc <> 0.
+    lv_log = /rb4r/if_plm_mbom_constant=>mc_msg_matnr_error.
+    REPLACE /rb4r/if_plm_sevm_dp_constant=>mc_string_and1 IN lv_log WITH lv_material. "#EC CI_FLDEXT_OK[2215424]
+    RAISE EXCEPTION TYPE /rb4r/cx_lo_pdpp_sevm_2msg_err
+      EXPORTING
+        iv_msg_text = lv_log
+        iv_part     = /rb4r/if_plm_sevm_dp_constant=>mc_string_body.
+  ENDIF.
+
+  IF iv_material IS SUPPLIED AND lv_material IS NOT INITIAL AND iv_material NE '*'.
+    lt_material = VALUE #( ( sign = 'I' option = 'EQ' low = lv_material ) ).
+  ENDIF.
+  IF iv_plant IS SUPPLIED AND iv_plant NE '*'.
+    lt_plant = VALUE #( ( sign = 'I' option = 'EQ' low = iv_plant ) ).
+  ENDIF.
+  IF iv_bom_usage IS SUPPLIED AND iv_bom_usage IS NOT INITIAL AND iv_bom_usage NE '*'.
+    lt_bom_usage = VALUE #( ( sign = 'I' option = 'EQ' low = iv_bom_usage ) ).
+  ENDIF.
+  IF iv_alternative IS SUPPLIED AND iv_alternative IS NOT INITIAL AND iv_alternative NE '*'.
+    lt_alternative = VALUE #( ( sign = 'I' option = 'EQ' low = iv_alternative ) ).
+  ENDIF.
+  IF iv_bom_nr IS SUPPLIED AND iv_bom_nr IS NOT INITIAL AND iv_bom_nr NE '*'.
+    lt_bom_nr = VALUE #( ( sign = 'I' option = 'EQ' low = iv_bom_nr ) ).
+  ENDIF.
+
+  IF lt_bom_nr IS NOT INITIAL OR lt_alternative IS NOT INITIAL OR lt_bom_usage IS NOT INITIAL OR
+    lt_plant IS NOT INITIAL OR lt_material IS NOT INITIAL.
+    SELECT *
+     FROM mast
+     INTO TABLE lt_mast
+     WHERE matnr IN lt_material
+       AND werks IN lt_plant
+       AND stlnr IN lt_bom_nr
+       AND stlan IN lt_bom_usage                          "#EC CI_SUBRC
+       AND stlal IN lt_alternative.                  "#EC CI_SEL_NESTED
+  ENDIF.
+
+  IF lt_mast IS INITIAL.
+    lv_log = /rb4r/if_plm_mbom_constant=>mc_msg_no_mast_found_error.
+    REPLACE /rb4r/if_plm_sevm_dp_constant=>mc_string_and1 IN lv_log WITH lv_keys.
+    RAISE EXCEPTION TYPE /rb4r/cx_lo_pdpp_sevm_2msg_err
+      EXPORTING
+        iv_msg_text = lv_log
+        iv_part     = /rb4r/if_plm_sevm_dp_constant=>mc_string_body.
+  ENDIF.
+  et_mast = lt_mast.
+
+ENDMETHOD.
+
+
+  METHOD read_table_filter.
+
+    DATA: lt_tabflt TYPE STANDARD TABLE OF /rb4r/plm_tabflt,
+          ls_tabflt TYPE /rb4r/plm_tabflt.
+    IF iv_tablename IS SUPPLIED AND iv_msgconfid IS SUPPLIED.
+      SELECT *
+        FROM /rb4r/plm_tabflt
+        INTO TABLE et_tabflt
+        WHERE msgconfid = iv_msgconfid
+          AND tablename = iv_tablename
+          AND active = abap_true.             "#EC CI_SUBRC
+    ELSEIF iv_msgconfid IS SUPPLIED.
+      SELECT *
+        FROM /rb4r/plm_tabflt
+        INTO TABLE et_tabflt
+        WHERE msgconfid = iv_msgconfid
+          AND active = abap_true.             "#EC CI_SUBRC
+    ELSEIF iv_tablename IS SUPPLIED.
+      SELECT *
+        FROM /rb4r/plm_tabflt
+        INTO TABLE et_tabflt
+        WHERE tablename = iv_tablename
+          AND active = abap_true.             "#EC CI_SUBRC
+    ELSE.
+      SELECT *
+        FROM /rb4r/plm_tabflt
+        INTO TABLE et_tabflt
+        WHERE active = abap_true.             "#EC CI_SUBRC
+    ENDIF.
+
+    " option can be refered to dimain DDOPTION, only support EQ,LE,GE,NE,GT,LT
+    " Not support BT,CP,NB,NP
+    LOOP AT et_tabflt INTO ls_tabflt WHERE opt = 'EQ' OR opt = 'LE' OR opt = 'GE'
+                                        OR opt = 'NE' OR opt = 'GT' OR opt = 'LT'.
+      ls_tabflt-opt = ls_tabflt-opt.
+      APPEND ls_tabflt TO lt_tabflt.
+    ENDLOOP.
+    SORT lt_tabflt BY msgconfid tablename filter_group fieldname.
+    et_tabflt = lt_tabflt.
+
+  ENDMETHOD.
+ENDCLASS.
