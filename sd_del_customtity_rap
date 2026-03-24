@@ -2169,4 +2169,53 @@ CLASS lsc_sd_c_delivery_change_ewm IMPLEMENTATION.
 
 ENDCLASS.
 
+////rb1m/cl_sd_del_chg_singleton
+CLASS /rb1m/cl_sd_del_chg_singleton DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC.
 
+public section.
+
+  class-methods GET_OBJECT
+    returning
+      value(RO_REF) type ref to /RB1M/CL_SD_DEL_CHG_SINGLETON .
+  methods SET_DELIVERY_DATA
+    importing
+      !IS_DELIVERY_CHANGE_EWM type /RB1M/SD_DELIVERY_CHANGE_EWM .
+  methods GET_DELIVERY_DATA
+    exporting
+      !ES_DELIVERY_CHANGE_EWM type /RB1M/SD_DELIVERY_CHANGE_EWM .
+protected section.
+private section.
+
+  class-data GO_REF type ref to /RB1M/CL_SD_DEL_CHG_SINGLETON .
+  data GS_DELIVERY_CHANGE_EWM type /RB1M/SD_DELIVERY_CHANGE_EWM .
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_DEL_CHG_SINGLETON IMPLEMENTATION.
+
+
+  METHOD get_delivery_data.
+**--To get the delivery data, this method will be
+**--used in class /RB1M/CL_IM_SD_BI_DEL_CHG
+    es_delivery_change_ewm = gs_delivery_change_ewm.
+  ENDMETHOD.
+
+
+  METHOD get_object.
+    IF /rb1m/cl_sd_del_chg_singleton=>go_ref IS NOT BOUND.
+      /rb1m/cl_sd_del_chg_singleton=>go_ref = NEW #( ).
+    ENDIF.
+
+    ro_ref = /rb1m/cl_sd_del_chg_singleton=>go_ref.
+  ENDMETHOD.
+
+
+  METHOD set_delivery_data.
+**--This method will be called in /RB1M/CL_IM_SD_BI_DEL_CHG
+    gs_delivery_change_ewm = is_delivery_change_ewm.
+  ENDMETHOD.
+ENDCLASS.
