@@ -301,6 +301,525 @@ define root custom entity /RB1M/SD_C_DELIVERY_CHANGE_EWM
       _ItemText                   : composition [0..*] of /RB1M/SD_C_DELIVERY_ITEM_TEXT;
 }
 ///@ObjectModel.query.implementedBy: 'ABAP:/RB1M/CL_SD_DEL_MASS_FLD_CHNGS'
+CLASS /rb1m/cl_sd_del_mass_fld_chngs DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
 
+  PUBLIC SECTION.
+
+    INTERFACES if_rap_query_provider .
+
+    TYPES:
+      tt_delivery_text     TYPE STANDARD TABLE OF /rb1m/sd_c_delivery_text .
+    TYPES:
+      ty_range_plant           TYPE RANGE OF werks_d .
+    TYPES:
+      ty_range_shiptoparty     TYPE RANGE OF kunwe .
+    TYPES:
+      ty_range_shippingpoint   TYPE RANGE OF vstel .
+    TYPES:
+      ty_range_warehouseno     TYPE RANGE OF lgnum .
+    TYPES:
+      ty_range_shippingtype    TYPE RANGE OF vsart .
+    TYPES:
+      ty_range_goodsmomstatus  TYPE RANGE OF wbstk .
+    TYPES:
+      ty_range_delivery        TYPE RANGE OF vbeln_vl .
+    TYPES:
+      ty_range_deliveryitem    TYPE RANGE OF posnr_vl .
+    TYPES:
+      ty_range_textname        TYPE RANGE OF tdobname .
+    TYPES:
+      ty_range_textappobject   TYPE RANGE OF tdobject .
+    TYPES:
+      ty_range_textid          TYPE RANGE OF tdid .
+    TYPES:
+      ty_range_language        TYPE RANGE OF spras .
+    TYPES:
+      tt_output TYPE STANDARD TABLE OF /rb1m/sd_c_delivery_change_ewm .
+    TYPES:
+      tt_Incoterm TYPE STANDARD TABLE OF /RB1M/SD_C_IncotermVH .
+
+    METHODS prepare_delivery_text_data
+      IMPORTING
+        !it_filter_condition TYPE if_rap_query_filter=>tt_name_range_pairs
+      EXPORTING
+        !et_final_output     TYPE tt_delivery_text .
+    METHODS update_ewm_tm_status
+      CHANGING
+        !ct_output TYPE tt_output .
+    METHODS constructor .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    DATA mo_data_extractor TYPE REF TO /rb1m/cl_sd_chadela_data_pro .
+    DATA mo_data_process TYPE REF TO /rb1m/cl_sd_chadela_process .
+
+    METHODS get_selection_screen_data
+      IMPORTING
+        !it_filter_condition    TYPE if_rap_query_filter=>tt_name_range_pairs
+      EXPORTING
+        !et_range_delivery      TYPE ty_range_delivery
+        !et_range_deliveryitem  TYPE ty_range_deliveryitem
+        !et_range_textname      TYPE ty_range_textname
+        !et_range_textappobject TYPE ty_range_textappobject
+        !et_range_textid        TYPE ty_range_textid
+        !et_range_language      TYPE ty_range_language .
+    METHODS prepare_delivery_data
+      IMPORTING
+        !it_filter_condition TYPE if_rap_query_filter=>tt_name_range_pairs
+      EXPORTING
+        !et_final_output     TYPE tt_output .
+    METHODS read_text
+      IMPORTING
+        !iv_id         TYPE tdid
+        !iv_language   TYPE tdspras
+        !iv_name       TYPE tdobname
+        !iv_object     TYPE tdobject
+      RETURNING
+        VALUE(rv_text) TYPE tdline .
+    METHODS get_delivery_text
+      IMPORTING
+        !iv_delivery            TYPE vbeln_vl
+        !iv_delivery_item       TYPE posnr_vl
+        !it_range_textname      TYPE ty_range_textname
+        !it_range_textappobject TYPE ty_range_textappobject
+        !it_range_textid        TYPE ty_range_textid
+        !it_range_language      TYPE ty_range_language
+      EXPORTING
+        !et_delivery_text       TYPE tt_delivery_text .
+    METHODS get_incoterm_data
+      IMPORTING
+        !it_filter_condition TYPE if_rap_query_filter=>tt_name_range_pairs
+      EXPORTING
+        !et_incoterm         TYPE tt_incoterm .
+ENDCLASS.
+
+
+
+CLASS /rb1m/cl_sd_del_mass_fld_chngs IMPLEMENTATION.
+
+
+  METHOD if_rap_query_provider~select.
+    " _Local data declearation.
+    DATA lt_current_text_output TYPE tt_delivery_text.
+    DATA lt_current_del_output  TYPE tt_output.
+    DATA lt_inco_output         TYPE tt_incoterm.
+
+    DATA(lv_page_size)        = io_request->get_paging( )->get_page_size( ).
+    DATA(lv_offset)           = io_request->get_paging( )->get_offset( ).
+    DATA(lt_requested_fields) = io_request->get_requested_elements( ) ##NEEDED.
+    DATA(lt_sort_order)       = io_request->get_sort_elements( ).
+
+    TRY.
+        DATA(lt_filter_condition) = io_request->get_filter( )->get_as_ranges( ).
+        " Essential: Capture the manual input search string
+        DATA(lv_search_expression) = io_request->get_search_expression( ).
+
+        IF io_request->is_data_requested( ).
+          CASE io_request->get_entity_id( ).
+            WHEN '/RB1M/SD_C_DELIVERY_CHANGE_EWM'.
+              me->prepare_delivery_data( EXPORTING it_filter_condition = lt_filter_condition
+                                         IMPORTING et_final_output     = DATA(lt_delivery) ).
+
+              " --Sorting Implementation: /RB1M/SD_C_DELIVERY_CHANGE_EWM
+              IF lt_sort_order IS NOT INITIAL.
+                DATA(lt_sort) = VALUE abap_sortorder_tab( FOR ls_sort_order IN lt_sort_order
+                                                          ( name       = ls_sort_order-element_name
+                                                            descending = ls_sort_order-descending ) ).
+                SORT lt_delivery BY (lt_sort).
+              ENDIF.
+
+              " --Paging implementation: /RB1M/SD_C_DELIVERY_CHANGE_EWM
+              IF lines( lt_delivery ) > 20.
+                DATA(lv_start) = lv_offset + 1.
+                DATA(lv_end)   = lv_page_size + lv_offset.
+                APPEND LINES OF lt_delivery FROM lv_start TO lv_end TO lt_current_del_output.
+              ELSE.
+                lt_current_del_output = lt_delivery.
+              ENDIF.
+
+              io_response->set_total_number_of_records( lines( lt_delivery ) ).
+              io_response->set_data( lt_current_del_output ).
+
+            WHEN '/RB1M/SD_C_DELIVERY_TEXT'.
+              prepare_delivery_text_data( EXPORTING it_filter_condition = lt_filter_condition
+                                          IMPORTING et_final_output     = DATA(lt_delivery_text) ).
+
+              " --Sorting Implementation: /RB1M/SD_C_DELIVERY_CHANGE_EWM
+              IF lt_sort_order IS NOT INITIAL.
+                lt_sort = VALUE abap_sortorder_tab( FOR ls_sort_order IN lt_sort_order
+                                                    ( name       = ls_sort_order-element_name
+                                                      descending = ls_sort_order-descending ) ).
+                SORT lt_delivery_text BY (lt_sort).
+              ENDIF.
+
+              " --Paging implementation: /RB1M/SD_C_DELIVERY_TEXT
+              IF lines( lt_delivery_text ) > 20.
+                lv_start = lv_offset + 1.
+                lv_end   = lv_page_size + lv_offset.
+                APPEND LINES OF lt_delivery_text FROM lv_start TO lv_end TO lt_current_text_output.
+              ELSE.
+                lt_current_text_output = lt_delivery_text.
+              ENDIF.
+
+              io_response->set_total_number_of_records( lines( lt_delivery_text ) ).
+              io_response->set_data( lt_current_text_output ).
+
+            WHEN '/RB1M/SD_C_INCOTERMVH'.
+              get_incoterm_data( EXPORTING it_filter_condition = lt_filter_condition
+                                 IMPORTING et_incoterm         = DATA(lt_incoterm) ).
+              IF lv_search_expression IS NOT INITIAL.
+                " Essential: Capture the manual input search string
+                IF strlen( lv_search_expression ) >= 3.
+                  LOOP AT lt_filter_condition INTO DATA(ls_filter).
+                    CASE ls_filter-name.
+                      WHEN 'SHIPPINGPOINT'.
+                        DATA(lv_shippingpoit) = VALUE #( ls_filter-range[ 1 ]-low OPTIONAL ).
+                      WHEN 'SHIPTOPARTY'.
+                        DATA(lv_shipto) = VALUE #( ls_filter-range[ 1 ]-low OPTIONAL ).
+                      WHEN OTHERS.
+                    ENDCASE.
+                  ENDLOOP.
+                  SELECT a~*
+                   FROM @lt_incoterm AS a
+                   WHERE shippingpoint = @lv_shippingpoit
+                     AND shiptoparty = @lv_shipto
+                     AND inco1 = @lv_search_expression
+                     INTO TABLE @DATA(lt_incoterm_1).
+                  IF sy-subrc IS INITIAL.
+                      lt_incoterm = lt_incoterm_1.
+                     " --Paging implementation: /RB1M/SD_C_INCOTERMVH
+                      IF lines( lt_incoterm ) > lv_page_size.
+                        lv_start = lv_offset + 1.
+                        lv_end   = lv_page_size + lv_offset.
+                        APPEND LINES OF lt_incoterm FROM lv_start TO lv_end TO lt_inco_output.
+                      ELSE.
+                        lt_inco_output = lt_incoterm.
+                      ENDIF.
+                  ENDIF.
+                ENDIF.
+              ELSE.
+                  " --Paging implementation: /RB1M/SD_C_INCOTERMVH
+                  IF lines( lt_incoterm ) > lv_page_size.
+                    lv_start = lv_offset + 1.
+                    lv_end   = lv_page_size + lv_offset.
+                    APPEND LINES OF lt_incoterm FROM lv_start TO lv_end TO lt_inco_output.
+                  ELSE.
+                    lt_inco_output = lt_incoterm.
+                  ENDIF.
+              ENDIF.
+
+              io_response->set_total_number_of_records( lines( lt_inco_output ) ).
+              io_response->set_data( lt_inco_output ).
+          ENDCASE.
+        ENDIF.
+      CATCH cx_root INTO DATA(lv_exception).
+        " TODO: variable is assigned but never used (ABAP cleaner)
+        DATA(lv_exception_message) = cl_message_helper=>get_latest_t100_exception( lv_exception )->if_message~get_longtext( ).
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD read_text.
+    " --Local Data Declearation
+    DATA lt_lines TYPE tlinet.
+
+    CALL FUNCTION 'READ_TEXT'
+      EXPORTING
+        id                      = iv_id
+        language                = iv_language
+        name                    = iv_name
+        object                  = iv_object
+      TABLES
+        lines                   = lt_lines
+      EXCEPTIONS
+        id                      = 1
+        language                = 2
+        name                    = 3
+        not_found               = 4
+        object                  = 5
+        reference_check         = 6
+        wrong_access_to_archive = 7
+        OTHERS                  = 8.
+    IF sy-subrc IS INITIAL.
+      LOOP AT lt_lines ASSIGNING FIELD-SYMBOL(<ls_line>).
+        rv_text = |{ rv_text }| && |{ <ls_line>-tdline }|.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD prepare_delivery_data.
+    " --Initializing exporting parameters.
+    CLEAR et_final_output.
+
+    get_selection_screen_data( EXPORTING it_filter_condition   = it_filter_condition
+                               IMPORTING et_range_delivery     = DATA(lt_range_delivery)
+                                         et_range_deliveryitem = DATA(lt_range_deliveryitem) ).
+
+    " --Fetching Delivery details
+    mo_data_extractor->read_delivery_details( EXPORTING it_range_delivery     = lt_range_delivery
+                                                        it_range_deliveryitem = lt_range_deliveryitem
+                                              IMPORTING et_delivery_data      = et_final_output ).
+
+    " --Updating EWM/TM Status
+    update_ewm_tm_status( CHANGING ct_output = et_final_output ).
+  ENDMETHOD.
+
+
+  METHOD constructor.
+    mo_data_extractor = NEW /rb1m/cl_sd_chadela_data_pro( ).
+    mo_data_process   = NEW /rb1m/cl_sd_chadela_process( ).
+  ENDMETHOD.
+
+
+  METHOD prepare_delivery_text_data.
+    " --Initializing exporting parameters.
+    CLEAR et_final_output.
+
+    get_selection_screen_data( EXPORTING it_filter_condition    = it_filter_condition
+                               IMPORTING et_range_delivery      = DATA(lt_range_delivery)
+                                         et_range_deliveryitem  = DATA(lt_range_deliveryitem)
+                                         et_range_textname      = DATA(lt_range_textname)
+                                         et_range_textappobject = DATA(lt_range_textappobject)
+                                         et_range_textid        = DATA(lt_range_textid)
+                                         et_range_language      = DATA(lt_range_language) ).
+
+    " --When user click on navigation from List Page->Report Page:
+    IF lines( it_filter_condition ) = 2.
+      APPEND VALUE #( sign   = /rb1m/if_sd_chadela_constant=>gc_sign_i
+                      option = /rb1m/if_sd_chadela_constant=>gc_option_eq
+                      low    = VALUE #( lt_range_delivery[ 1 ]-low OPTIONAL ) )
+             TO lt_range_textname[].
+    ENDIF.
+
+    get_delivery_text( EXPORTING iv_delivery            = VALUE #( lt_range_delivery[ 1 ]-low OPTIONAL )
+                                 iv_delivery_item       = VALUE #( lt_range_deliveryitem[ 1 ]-low OPTIONAL )
+                                 it_range_textname      = lt_range_textname
+                                 it_range_textappobject = lt_range_textappobject
+                                 it_range_textid        = lt_range_textid
+                                 it_range_language      = lt_range_language
+                       IMPORTING et_delivery_text       = et_final_output ).
+  ENDMETHOD.
+
+
+  METHOD update_ewm_tm_status.
+
+*-Read Inco1 text
+    SELECT incotermsclassification, incotermsclassificationname
+      FROM i_incotermsclassificationtext
+      WHERE language = @sy-langu
+      INTO TABLE @DATA(lt_inco).
+    IF sy-subrc IS NOT INITIAL.
+      CLEAR: lt_inco.
+    ENDIF.
+
+    LOOP AT ct_output ASSIGNING FIELD-SYMBOL(<ls_output>).
+      mo_data_process->get_ewm_tm_status(
+        EXPORTING
+          iv_delivery             =  <ls_output>-delivery            " Delivery
+          iv_delivery_item        =  <ls_output>-deliveryitem        " Delivery Item
+        IMPORTING
+          ev_warehousetask_exists =  DATA(lv_warehousetask_exists)   " General Flag
+          ev_pickingstatus        =  DATA(lv_pickingstatus)          " Status Value
+          es_root_node            =  DATA(ls_root_node)              " Root Node
+          es_item                 =  DATA(ls_item) ).                " Delivery Item (PRD) for Read Operations
+
+      "--Inco1 text
+      <ls_output>-incotermsclassificationname = VALUE #( lt_inco[ incotermsclassification = <ls_output>-inco1
+                                                                   ]-incotermsclassificationname OPTIONAL ).
+
+      "--Updating EWM Quantity & UOM
+      IF <ls_output>-distributionstatus NE ' '.
+        <ls_output>-quantity  = ls_item-qty-qty.
+        <ls_output>-salesunit = ls_item-qty-uom.
+      ENDIF.
+
+      "--Only EWM deliveries will be changed in the Application.
+      "--for ERP Delivery, Restrict the user with the message.
+      IF <ls_output>-distributionstatus IS INITIAL.
+        <ls_output>-delcriticality = 1.
+        <ls_output>-message        = TEXT-005.
+        CONTINUE.
+      ENDIF.
+
+      IF <ls_output>-delcriticality <> 1.
+        "--Check if Warehouse Task is exist
+        IF lv_warehousetask_exists IS NOT INITIAL.
+          <ls_output>-delcriticality = 2.
+          <ls_output>-message        = TEXT-001.
+        ENDIF.
+
+        "--Check Picking Status
+        IF lv_pickingstatus IS NOT INITIAL AND lv_pickingstatus NE 1.
+          IF lv_pickingstatus EQ 2.
+            <ls_output>-delcriticality = 3.
+            MESSAGE ID '/RB1M/SD_DEL_CHANGE' TYPE 'I' NUMBER 008 INTO <ls_output>-message.
+          ELSE.
+            <ls_output>-delcriticality = 2.
+            MESSAGE ID '/RB1M/SD_DEL_CHANGE' TYPE 'I' NUMBER 001 INTO <ls_output>-message.
+          ENDIF.
+        ENDIF.
+
+        "--Check if Freight Unit is assigned to consignment Order
+        IF ls_root_node-plan_status_root = 02 OR ls_root_node-plan_status_root = 03.
+          <ls_output>-delcriticality = 2.
+          <ls_output>-message        = TEXT-002.
+        ENDIF.
+
+        "--Check if Goods Issue posted (EWM/TM)
+        IF ls_root_node-dlv_goods_mvmnt =  /rb1m/if_sd_chadela_constant=>gc_dlv_goods_mvmnt_c.
+          <ls_output>-delcriticality = 2.
+          <ls_output>-message        = TEXT-003.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD get_delivery_text.
+    CLEAR et_delivery_text.
+    SELECT a~textobjectkey,
+           a~textobjecttype,
+           a~textobjectcategory,
+           a~language,
+           b~textobjecttypename
+      FROM i_textobject AS a
+      LEFT OUTER JOIN i_textobjecttypetext AS b
+      ON  a~textobjectcategory = b~textobjectcategory
+      AND a~textobjecttype     = b~textobjecttype
+      AND b~language           = @sy-langu
+      WHERE a~textobjectkey      IN @it_range_textname
+        AND a~textobjecttype     IN @it_range_textid
+        AND a~textobjectcategory = @/rb1m/if_sd_chadela_constant=>gc_textobjectcategory_vbbk
+        AND a~language           IN @it_range_language
+      ORDER BY a~textobjecttype
+      INTO TABLE @DATA(lt_textobject).
+    IF sy-subrc IS NOT INITIAL.
+      CLEAR lt_textobject.
+    ENDIF.
+
+    LOOP AT lt_textobject ASSIGNING FIELD-SYMBOL(<ls_textobject>).
+      APPEND INITIAL LINE TO et_delivery_text ASSIGNING FIELD-SYMBOL(<ls_text>).
+      <ls_text>-delivery      = iv_delivery.
+      <ls_text>-deliveryitem  = iv_delivery_item.
+      <ls_text>-textname      = <ls_textobject>-textobjectkey.
+      <ls_text>-textappobject = <ls_textobject>-textobjectcategory.
+      <ls_text>-textid        = <ls_textobject>-textobjecttype.
+      <ls_text>-tdtext        = <ls_textobject>-textobjecttypename.
+      <ls_text>-language      = <ls_textobject>-language.
+      <ls_text>-text          = read_text( iv_id       = <ls_textobject>-textobjecttype
+                                           iv_language = <ls_textobject>-language
+                                           iv_name     = <ls_textobject>-textobjectkey
+                                           iv_object   = <ls_textobject>-textobjectcategory ).
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD get_selection_screen_data.
+    " --Initializing exporting parameters.
+    CLEAR: et_range_delivery,
+           et_range_deliveryitem,
+           et_range_textappobject,
+           et_range_textid,
+           et_range_textname,
+           et_range_language.
+
+    LOOP AT it_filter_condition ASSIGNING FIELD-SYMBOL(<fs_filter>).
+      CASE <fs_filter>-name.
+        WHEN 'DELIVERY'.
+          et_range_delivery = VALUE #( FOR ls_range IN <fs_filter>-range
+                                       ( sign   = ls_range-sign
+                                         option = ls_range-option
+                                         low    = ls_range-low
+                                         high   = ls_range-high ) ).
+        WHEN 'DELIVERYITEM'.
+          et_range_deliveryitem = VALUE #( FOR ls_range IN <fs_filter>-range
+                                           ( sign   = ls_range-sign
+                                             option = ls_range-option
+                                             low    = ls_range-low
+                                             high   = ls_range-high ) ).
+
+        WHEN 'TEXTNAME'.
+          et_range_textname = VALUE #( FOR ls_range IN <fs_filter>-range
+                                       ( sign   = ls_range-sign
+                                         option = ls_range-option
+                                         low    = ls_range-low
+                                         high   = ls_range-high ) ).
+        WHEN 'TEXTAPPOBJECT'.
+          et_range_textappobject = VALUE #( FOR ls_range IN <fs_filter>-range
+                                            ( sign   = ls_range-sign
+                                              option = ls_range-option
+                                              low    = ls_range-low
+                                              high   = ls_range-high ) ).
+        WHEN 'TEXTID'.
+          et_range_textid = VALUE #( FOR ls_range IN <fs_filter>-range
+                                     ( sign   = ls_range-sign
+                                       option = ls_range-option
+                                       low    = ls_range-low
+                                       high   = ls_range-high ) ).
+        WHEN 'LANGUAGE'.
+          et_range_language = VALUE #( FOR ls_range IN <fs_filter>-range
+                                       ( sign   = ls_range-sign
+                                         option = ls_range-option
+                                         low    = ls_range-low
+                                         high   = ls_range-high ) ).
+      ENDCASE.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD get_incoterm_data.
+
+    DATA: lv_shippingpoit TYPE vstel,
+          lv_shipto       TYPE kunnr.
+
+    CLEAR : et_incoterm.
+
+    LOOP AT it_filter_condition INTO DATA(ls_filter).
+      CASE ls_filter-name.
+        WHEN 'SHIPPINGPOINT'.
+          lv_shippingpoit = VALUE #( ls_filter-range[ 1 ]-low OPTIONAL ).
+        WHEN 'SHIPTOPARTY'.
+          lv_shipto = VALUE #( ls_filter-range[ 1 ]-low OPTIONAL ).
+        WHEN 'INCO2'.
+          DATA(lv_inco2) = VALUE #( ls_filter-range[ 1 ]-low OPTIONAL ).
+        WHEN OTHERS.
+      ENDCASE.
+    ENDLOOP.
+
+*-Fetch inco1 details
+    SELECT inco~incotermsclassification,
+           inco~locationismandatory,
+           inco_t~incotermsclassificationname
+           FROM i_incotermsclassification AS inco LEFT OUTER JOIN i_incotermsclassificationtext AS inco_t
+           ON inco~incotermsclassification = inco_t~incotermsclassification
+          AND inco_t~language = @sy-langu
+          INTO TABLE @DATA(lt_inco).
+    IF sy-subrc IS NOT INITIAL.
+      CLEAR:lt_inco.
+    ENDIF.
+
+*-Determine INCO2 from utility class and fill output table
+    DATA(lo_inco_utility) = NEW /rb1m/cl_sd_inco_utilities( ).
+
+    et_incoterm = VALUE #( FOR ls_inco IN lt_inco
+                           LET lv_inco2_d = lo_inco_utility->get_inco2_value(
+                                              iv_inco1  = ls_inco-incotermsclassification
+                                              iv_vstel  = lv_shippingpoit
+                                              iv_kunnr  = lv_shipto )
+                           IN shippingpoint = lv_shippingpoit
+                              shiptoparty   = lv_shipto
+                            ( inco1         = ls_inco-incotermsclassification
+                              locationismandatory = ls_inco-locationismandatory
+                              inconame      = ls_inco-incotermsclassificationname
+                              inco2         =  COND #( WHEN lv_inco2_d IS NOT INITIAL THEN lv_inco2_d
+                                                       ELSE lv_inco2 ) ) ).
+
+
+  ENDMETHOD.
+ENDCLASS.
 
 
