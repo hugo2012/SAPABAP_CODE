@@ -1,0 +1,170 @@
+class /RB1M/CL_SD_DEL_V2_ATCUD_PT definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces /RB1M/IF_SD_DEL_V2_ATCUD_PT .
+
+  constants GC_COUNTRY_PT type LAND1 value 'PT' ##NO_TEXT.
+  constants GC_PRINT_DEFAULT_VALUE type CHAR60 value ' - Processado por Programa Certificado n.º 631 /AT' ##NO_TEXT.
+  constants GC_QRCODE_OUTBOUND_DELIVERY type RDSV_QRC_SOURCE_TYPE value 'OUTBOUND_DELIVERY' ##NO_TEXT.
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_DEL_V2_ATCUD_PT IMPLEMENTATION.
+
+
+  METHOD /rb1m/if_sd_del_v2_atcud_pt~check_country_pt.
+*  Break Point (SAAB)
+    BREAK-POINT ID /RB1M/SD_DELI_NOTE_BREAK_POINT.
+    SELECT SINGLE bwkey, bukrs, Land1
+      INTO @DATA(ls_company_valuation)
+      FROM /rb1m/sd_i_company_valuation
+    WHERE bwkey = @iv_plant.
+    IF sy-subrc IS INITIAL.
+      IF ls_company_valuation-land1 = gc_country_pt.
+        ev_bukrs = ls_company_valuation-bukrs.
+        ev_result = abap_true.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_del_v2_atcud_pt~check_delivery_type_pt.
+    BREAK-POINT ID /RB1M/SD_DELI_NOTE_BREAK_POINT.
+    SELECT SINGLE Bukrs, LeadDoctype
+      INTO @DATA(ls_sipt_numbr_obd)
+      FROM /rb1m/sd_i_sipt_numbr_obd
+    WHERE Bukrs = @iv_bukrs AND  LeadDoctype = @iv_lfart.
+    IF sy-subrc IS INITIAL.
+      ev_result = abap_true.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_del_v2_atcud_pt~check_digital_signature_pt.
+    CHECK is_vbdkl IS NOT INITIAL AND is_vbdpl IS NOT INITIAL.
+    CALL METHOD me->/rb1m/if_sd_del_v2_atcud_pt~check_country_pt
+      EXPORTING
+        iv_plant   = is_vbdpl-werks
+      IMPORTING
+        ev_bukrs   = DATA(lv_bukrs)
+        ev_result  = DATA(lv_result).
+    IF lv_result = abap_true.
+      CLEAR lv_result.
+      CALL METHOD me->/rb1m/if_sd_del_v2_atcud_pt~check_delivery_type_pt
+        EXPORTING
+          iv_bukrs  = lv_bukrs
+          iv_lfart  = is_vbdkl-lfart
+        IMPORTING
+          ev_result = lv_result.
+      IF lv_result = abap_true.
+        ev_result = abap_true.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_del_v2_atcud_pt~get_delivery_print_chars.
+*  Break Point (SAAB)
+    BREAK-POINT ID /RB1M/SD_DELI_NOTE_BREAK_POINT.
+    DATA lv_pchar TYPE sipt_print_char.
+    CHECK is_vbdkl-xblnr IS NOT INITIAL.
+    SELECT SINGLE Vbeln , Xblnr, Cancel,PrintChar
+      INTO @DATA(ls_sipt_likp)
+      FROM /rb1m/sd_i_sipt_likp
+    WHERE Vbeln = @is_vbdkl-vbeln
+           AND Xblnr = @is_vbdkl-xblnr
+           AND Cancel = ''.
+    IF sy-subrc IS INITIAL.
+      lv_pchar = COND #( WHEN ls_sipt_likp-PrintChar IS NOT INITIAL THEN ls_sipt_likp-PrintChar
+                            ELSE '').
+      IF lv_pchar IS NOT INITIAL.
+        ev_print_char = lv_pchar.
+        ev_dig_sig_txt = |{ lv_pchar }| & | { gc_print_default_value } |.
+      ENDIF.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_del_v2_atcud_pt~get_digital_signature_pt.
+
+    CALL METHOD me->/rb1m/if_sd_del_v2_atcud_pt~check_digital_signature_pt
+      EXPORTING
+        is_vbdkl  = is_vbdkl
+        is_vbdpl  = is_vbdpl
+      IMPORTING
+        ev_result = DATA(lv_result).
+    IF lv_result = abap_true .
+      CALL METHOD me->/rb1m/if_sd_del_v2_atcud_pt~get_delivery_print_chars
+        EXPORTING
+          is_vbdkl       = is_vbdkl
+        IMPORTING
+          ev_dig_sig_txt = DATA(lv_dig_sig_txt)
+          ev_print_char  = DATA(lv_print_char).
+      IF lv_print_char IS NOT INITIAL.
+        CALL METHOD me->/rb1m/if_sd_del_v2_atcud_pt~get_qr_code_portugal
+          EXPORTING
+            iv_deliverynumber = is_vbdkl-vbeln
+          IMPORTING
+            es_qrcode         = DATA(ls_qrcode).
+        IF ls_qrcode-visible = abap_true.
+          ev_dig_sig_txt = COND #( WHEN lv_dig_sig_txt IS NOT INITIAL THEN lv_dig_sig_txt ).
+          ev_print_char = COND #( WHEN lv_print_char IS NOT INITIAL THEN lv_print_char ).
+          es_qrcode   = COND #( WHEN ls_qrcode IS NOT INITIAL THEN ls_qrcode ).
+          ev_refno_sig = COND #( WHEN is_vbdkl-xblnr IS NOT INITIAL THEN is_vbdkl-xblnr ). "is_vbdkl-xblnr
+        ELSE.
+          CLEAR: ev_dig_sig_txt,ev_print_char,es_qrcode, ev_refno_sig.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_del_v2_atcud_pt~get_qr_code_portugal.
+    DATA: ls_qrc_object_pt          TYPE cl_qrcode_pt_obd_utill=>ty_obd_pt_s,
+          lo_cl_qrcode_pt_obd_utill TYPE REF TO cl_qrcode_pt_obd_utill,
+          ls_qrc_get_param          TYPE cl_rdsv_qrcode=>qrcode_get_param,
+          ls_qrc_result             TYPE cl_rdsv_qrcode=>qrcode_output,
+          ls_qrcode                 TYPE sipt_s_qrcode.
+    " get data needed for QR creation - based on delivery nr
+    CREATE OBJECT lo_cl_qrcode_pt_obd_utill.
+
+    lo_cl_qrcode_pt_obd_utill->get_qrcode_obd_data(
+       EXPORTING
+         iv_delivery     = iv_deliverynumber
+       IMPORTING
+         qrcode_obd_data = ls_qrc_object_pt ) .
+
+    " fill additional QR parameters
+    ls_qrc_get_param-intca = gc_country_pt.
+    ls_qrc_get_param-source_type = gc_qrcode_outbound_delivery. "type for deliveries, check table rdsvi_qrc_cfg
+
+    " get QR code string based on collected delivery data
+    TRY.
+        cl_rdsv_qrcode=>get_qrcode(
+         EXPORTING
+           get_param = ls_qrc_get_param
+           source_object = ls_qrc_object_pt
+         IMPORTING
+             qrcode = ls_qrc_result ) .
+      CATCH cx_rdsv_qrcode .
+    ENDTRY.
+
+    " map the result to qr structure send to form
+    ls_qrcode-visible = ls_qrc_result-visible.
+    ls_qrcode-qrstring = ls_qrc_result-qrstring.
+    IF ls_qrcode IS NOT INITIAL.
+      es_qrcode = ls_qrcode.
+    ENDIF.
+*  Break Point (SAAB)
+    BREAK-POINT ID /RB1M/SD_DELI_NOTE_BREAK_POINT.
+  ENDMETHOD.
+ENDCLASS.
