@@ -1,0 +1,306 @@
+@EndUserText.label: 'Delivery - Mass Field Changes'
+@ObjectModel.query.implementedBy: 'ABAP:/RB1M/CL_SD_DEL_MASS_FLD_CHNGS'
+@VDM.viewType: #CONSUMPTION
+@UI.headerInfo: { typeName: 'Delivery Change',
+                  typeNamePlural: 'Deliveries'
+                 }
+define root custom entity /RB1M/SD_C_DELIVERY_CHANGE_EWM
+{
+      @UI.facet                   : [
+         {
+          id                      : 'DeliveryNo',
+          purpose                 : #HEADER,
+          type                    : #DATAPOINT_REFERENCE,
+          position                : 10,
+          targetQualifier         : 'Delivery'
+         },
+         {
+          id                      : 'DeliveryItem',
+          purpose                 : #HEADER,
+          type                    : #DATAPOINT_REFERENCE,
+          position                : 20,
+          targetQualifier         : 'DeliveryItem'
+         },
+
+         {
+           label                  : 'General Information',
+           id                     : 'HeaderData',
+           type                   : #COLLECTION,
+           position               : 10
+         },
+         {
+           id                     : 'DeliveryHeader',
+           type                   : #IDENTIFICATION_REFERENCE,
+           purpose                : #STANDARD,
+           parentId               : 'HeaderData',
+           position               : 10
+         },
+
+         {
+           label                  : 'Changeable Delivery Fields',
+           id                     : 'ChangeableData',
+           type                   : #COLLECTION,
+           position               : 20
+         },
+         {
+           id                     : 'ChangeableFieldGroup',
+           purpose                : #STANDARD,
+           type                   : #FIELDGROUP_REFERENCE,
+           parentId               : 'ChangeableData',
+           position               : 10,
+           targetQualifier        : 'ChangeableFields'
+         },
+      {
+        id                        : 'Text',
+        purpose                   : #STANDARD,
+        type                      : #LINEITEM_REFERENCE,
+        label                     : 'Header Text',
+        position                  : 30,
+        targetElement             : '_Text'
+       },
+       {
+        id                        : 'ItemText',
+        purpose                   : #STANDARD,
+        type                      : #LINEITEM_REFERENCE,
+        label                     : 'Item Text',
+        position                  : 40,
+        targetElement             : '_ItemText'
+       }
+      ]
+      @Consumption.filter         : { mandatory: true }
+      @UI.lineItem                : [{ position: 20, label: 'Delivery' }]
+      @UI.selectionField          : [{ position: 10 }]
+      @UI.dataPoint               : { qualifier: 'Delivery', title: 'Delivery'}
+      @Consumption.valueHelpDefinition: [ { entity: { name: 'I_DeliveryDocument', element: 'DeliveryDocument' } } ]
+  key Delivery                    : vbeln_vl;
+      @UI.lineItem                : [{ position: 30, label: 'Delivery Item' }]
+      @UI.dataPoint               : { qualifier: 'DeliveryItem', title: 'Delivery Item'}
+  key DeliveryItem                : posnr_vl;
+      @UI.lineItem                : [{ position: 40, label: 'Material' }]
+      Material                    : matnr;
+      @UI.lineItem                : [{ position: 50, label: 'Storage location' }]
+      StorageLocation             : lgort_d;
+      @UI.lineItem                : [{ position: 60, label: 'INCO1' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 10 }]
+      // @Consumption.valueHelpDefinition: [ { entity: { name: 'I_INCOTERMSCLASSIFICATION', element: 'IncotermsClassification' } } ]
+//      @Consumption.valueHelpDefinition: [{
+//          entity                  : {
+//              name                : '/RB1M/SD_C_IncotermVH',
+//              element             : 'INCO1'
+//          },
+//          additionalBinding       : [{
+//              localElement        :'INCO2',
+//              element             :'INCO2'
+//          },
+//          {
+//              localElement        : 'IncotermsClassificationName',
+//              element             : 'IncoName'
+//          },
+//          {
+//              localElement        :'ShippingPoint',
+//              parameter           :'ShippingPoint'
+//          },
+//          {
+//              localElement        :'ShipToParty',
+//              parameter           :'ShipToParty'
+//          }]
+//
+//      }]
+
+       @Consumption.valueHelpDefinition: [{
+          entity                  : {
+              name                : '/RB1M/SD_C_IncotermVH',
+              element             : 'INCO1'
+          }
+      }]
+      @ObjectModel.text.element   : [ 'IncotermsClassificationName' ]
+      @Search.defaultSearchElement: true
+      @Search.fuzzinessThreshold  : 0.8
+      @Search.ranking             : #HIGH
+      INCO1                       : inco1;
+      @UI.lineItem                : [{ position: 70, label: 'INCO2' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 20 }]
+      INCO2                       : inco2;
+      @UI.lineItem                : [{ position: 80, label: 'Shipping Type' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 30 }]
+      @Consumption.valueHelpDefinition: [ { entity: { name: 'I_ShippingType', element: 'ShippingType' } } ]
+      @EndUserText.label          : 'Shipping Type'
+      ShippingType                : vsarttr;
+      @UI.lineItem                : [{ position: 90, label: 'Plant' }]
+      @UI.identification          : [{ position: 10 }]
+      @Consumption.valueHelpDefinition: [ { entity: { name: 'I_PlantVH', element: 'Plant' } } ]
+      Plant                       : werks_d;
+      @Semantics.quantity.unitOfMeasure: 'SalesUnit'
+      @UI.lineItem                : [{ position: 100, label: 'Quantity' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 40 }]
+      Quantity                    : lfimg;
+      SalesUnit                   : vrkme;
+      WeightUnit                  : gewei;
+      @UI.identification          : [{position : 20 },
+                            {type : #FOR_ACTION, dataAction: 'cancel_delivery', label: 'Cancel Delivery'}]
+      @Consumption.valueHelpDefinition: [ { entity: { name: 'I_ShippingPointStdVH', element: 'ShippingPoint' } } ]
+      ShippingPoint               : vstel;
+      @EndUserText.label          : 'Ship-To Party'
+      @UI.identification          : [{position : 30 }]
+      @Consumption.valueHelpDefinition: [ { entity: { name: 'I_Customer_VH', element: 'Customer' } } ]
+      ShipToParty                 : kunnr;
+      @UI.identification          : [{position : 40 }]
+      @Consumption.valueHelpDefinition: [ { entity: { name: 'I_WarehouseStdVH', element: 'Warehouse' } } ]
+      WarehouseNo                 : lgnum;
+      @UI.identification          : [{position : 50 }]
+      @Consumption.valueHelpDefinition: [ { entity: { name: 'I_OverallGoodsMovementStatus', element: 'OverallGoodsMovementStatus' } } ]
+      GoodsMomStatus              : wbstk;
+      @Semantics.quantity.unitOfMeasure: 'WeightUnit'
+      @UI.lineItem                : [{ position: 110 }]
+      @UI.identification          : [{ position: 60 }]
+      //@UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 50 }]
+      @EndUserText.label          : 'Header Weights (gross weight)'
+      GrossWeight                 : gsgew;
+      /*-- OEDEV - 7090 : to hide
+           @UI.lineItem       : [{ position: 120, label: 'Picking Date' }]
+           @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 60 }]
+     */
+      @UI.hidden                  : true
+      PickingDate                 : kodat;
+
+      //-----------------------------------------------------------------------------------
+      //      @UI.lineItem       : [{ position: 130, label: 'Transport Planning Date' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 70 }]
+      //      TransPlanDate      : tddat_d;
+      //
+      //      @UI.lineItem       : [{ position: 140, label: 'Loading Date' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 80 }]
+      //      LoadingDate        : lddat;
+      //
+      //      /*-- OEDEV - 7090 : to hide in the meantime
+      //            @UI.lineItem       : [{ position: 150, label: 'Planned Goods Issue Date' }]
+      //            @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 90 }]
+      //      */
+      //      @UI.hidden         : true
+      //      PlannedGI          : wadak;
+      //
+      //      @UI.lineItem       : [{ position: 160, label: 'Delivery Date' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 100 }]
+      //      DeliveryDate       : lfdat_v;
+
+      //-----------------------------------------------------------------------------------
+      //      @UI.lineItem       : [{ position: 135, label: 'Transportation Planning Time' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 75 }]
+      //      @Semantics.timeZone: true
+      //      TransPlanTimeZone   : tznzone; //tsegzoniss;
+      //      @Semantics.timeZoneReference: 'TransPlanTimeZone'
+      //     @Consumption.valueHelpDefinition: [{ entity: { name: 'I_TimeZone', element: 'TimeZoneID' } }]
+      @Semantics.timeZone         : true
+      DelLocTzone                 : tsegzoniss;
+
+      @UI.hidden                  : true
+      @UI.lineItem                : [{ position: 130, label: 'Transport Planning Date' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 70 }]
+      TransPlanDate               : tddat_d;
+      //      @UI.hidden         : true
+      //      @UI.lineItem       : [{ position: 135, label: 'Transportation Planning Time' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 75 }]
+      //      TransPlanTime      : tduhr;
+
+      ////      @Semantics.timeZone: true
+      //      @UI.lineItem       : [{ position: 136, label: 'Transportation Planning Date' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 70 }]
+      //      @Consumption.valueHelpDefinition: [{ entity: { name: 'I_TimeZone', element: 'TimeZoneID' } }]
+      //      @Semantics.timeZone: true
+      //      TransPlanTimeZone   : tznzone; //tsegzoniss;
+
+      @EndUserText.label          : 'Transportation Planning Date'
+      @Semantics.timeZoneReference: 'DelLocTzone'
+      @UI.lineItem                : [{ position: 130, label: 'Transportation Planning Timestamp' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 70 }]
+      TransPlanTimeStamp          : timestamp;
+
+      @UI.hidden                  : true
+      @UI.lineItem                : [{ position: 140, label: 'Loading Date' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 80 }]
+      LoadingDate                 : lddat;
+      //      @UI.hidden         : true
+      //      @UI.lineItem       : [{ position: 145, label: 'Loading Time' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 85 }]
+      //      LoadingTime        : lduhr;
+
+
+      @EndUserText.label          : 'Loading Date'
+      @Semantics.timeZoneReference: 'DelLocTzone'
+      @UI.lineItem                : [{ position: 140, label: 'Loading Date' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 80 }]
+      LoadingTimeStamp            : timestamp;
+
+      /*-- OEDEV - 7090 : to hide in the meantime
+            @UI.lineItem       : [{ position: 150, label: 'Planned Goods Issue Date' }]
+            @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 90 }]
+      */
+      @UI.hidden                  : true
+      PlannedGI                   : wadak;
+      @UI.hidden                  : true
+      @UI.lineItem                : [{ position: 160, label: 'Delivery Date' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 100 }]
+      DeliveryDate                : lfdat_v;
+      //      @UI.hidden         : true
+      //      @UI.lineItem       : [{ position: 165, label: 'Delivery Time' }]
+      //      @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 105 }]
+      //      DeliveryTime       : lfuhr;
+
+      @Semantics.timeZone         : true
+      RecTimezone                 : tsegzonrec;
+      @EndUserText.label          : 'Delivery Date'
+      @Semantics.timeZoneReference: 'RecTimezone'
+      @UI.lineItem                : [{ position: 160, label: 'Delivery Date' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 100 }]
+      DeliveryTimeStamp           : timestamp;
+      //----------------------------------------------------------------------------------
+      /*-- OEDEV - 7090 : to hide in the meantime
+            @UI.lineItem       : [{ position: 170 }]
+            @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 110 }]
+            @EndUserText.label : 'Mode Of Transport(Intrastat)'
+            @Consumption.valueHelpDefinition: [ { entity: { name: 'I_IntrastatCrsBorderTrMode', element: 'IntrastatCrsBorderTrMode' } } ]
+      */
+      @UI.hidden                  : true
+      MoTIntrastat                : expvz;
+      /*-- OEDEV - 7090 : to hide in the meantime
+            @UI.lineItem       : [{ position: 180 }]
+            @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 120 }]
+            @EndUserText.label : 'Mode Of Transport(Border)'
+            @Consumption.valueHelpDefinition: [ { entity: { name: 'I_ModeOfTransportVH', element: 'ModeOfTransport' } } ]
+      */
+      @UI.hidden                  : true
+      MoTBorder                   : /sapsll/expvz;
+      /*-- OEDEV - 7090 : to hide in the meantime
+            @UI.lineItem       : [{ position: 190 }]
+            @UI.fieldGroup     : [{ qualifier: 'ChangeableFields', position: 130 }]
+            @EndUserText.label : 'Mode Of Transport(Inland)'
+            @Consumption.valueHelpDefinition: [ { entity: { name: 'I_ModeOfTransportVH', element: 'ModeOfTransport' } } ]
+      */
+      @UI.hidden                  : true
+      MoTInland                   : /sapsll/iever;
+      @UI.lineItem                : [{ position: 200, label: 'Ext. Delivery Note' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 140 }]
+      ExtDelNote                  : lifex;
+      @UI.lineItem                : [{ position: 210, label: 'Customer Material' }]
+      @UI.fieldGroup              : [{ qualifier: 'ChangeableFields', position: 150 }]
+      CustMaterial                : kdmat;
+      BaseUoM                     : meins;
+      @UI.hidden                  : true
+      DistributionStatus          : vlstk;
+      @UI.hidden                  : true
+      DeliveryType                : lfart;
+      @EndUserText.label          : 'Message'
+      DelCriticality              : int1;
+      @UI.lineItem                : [{ position: 10, criticality: 'DelCriticality' }]
+      Message                     : bapi_msg;
+      @Semantics.text             : true
+      @UI.hidden                  : true
+      IncotermsClassificationName : incoterms_classification_name;
+      @ObjectModel.filter.enabled : false
+      _Text                       : composition [0..*] of /RB1M/SD_C_DELIVERY_TEXT;
+      _ItemText                   : composition [0..*] of /RB1M/SD_C_DELIVERY_ITEM_TEXT;
+}
+///@ObjectModel.query.implementedBy: 'ABAP:/RB1M/CL_SD_DEL_MASS_FLD_CHNGS'
+
+
+
