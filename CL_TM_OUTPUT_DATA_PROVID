@@ -1,0 +1,669 @@
+class /RB1M/CL_TM_OUTPUT_DATA_PROVID definition
+  public
+  final
+  create public .
+
+public section.
+
+  types:
+    tt_shipto       TYPE STANDARD TABLE OF /rb1m/tm_shipto .
+  types:
+    tt_output_types TYPE STANDARD TABLE OF /rb1m/tm_output_type .
+  types:
+    tt_countries    TYPE STANDARD TABLE OF /rb1m/tm_country .
+  types:
+    tt_ship_point   TYPE STANDARD TABLE OF /rb1m/tm_ship_point .
+  types:
+    tt_csp          TYPE STANDARD TABLE OF /rb4r/sd_csp .
+  types:
+    tt_access_seq   TYPE STANDARD TABLE OF /rb1m/tm_acc_seq .
+  types:
+    tt_access_seq_map   TYPE STANDARD TABLE OF /rb1m/tm_acc_map .
+  types:
+    tr_shipto       TYPE RANGE OF char20 .
+  types:
+    tr_name         TYPE RANGE OF name1_gp .
+  types:
+    tr_description  TYPE RANGE OF vtext .
+  types:
+    tr_ship_point   TYPE RANGE OF char20 .
+  types:
+    tr_CSP          TYPE RANGE OF char50 . "/rb4r/sd_csp_d .
+  types:
+    tr_csp_description TYPE RANGE OF /rb4r/sd_csp_descr .
+  types:
+    tr_devices TYPE RANGE OF rspolname .
+  types:
+    tr_devices_description TYPE RANGE OF rspopmsg .
+  types:
+    tr_country TYPE RANGE OF char10 .
+  types:
+    tr_countryname TYPE RANGE OF landx50 .
+  types:
+    tr_output  TYPE RANGE OF ppfdtt .
+  types:
+    TT_filter TYPE STANDARD TABLE OF /rb4r/plm_tabflt .
+  types:
+    tt_devices TYPE STANDARD TABLE OF /rb1m/tm_print_device .
+  types:
+    tr_prt_timepoint TYPE RANGE OF char5 .
+  types:
+    tr_prt_timepointtext TYPE RANGE OF char50 .
+  types:
+    tt_prt_timepoint  TYPE STANDARD TABLE OF /rb1m/tm_s_timepoint .
+  types:
+    tt_ppfaction_printtime  TYPE STANDARD TABLE OF /rb1m/tm_printtime_actppf .
+  types:
+    tr_asn_partner          TYPE RANGE OF char15 .
+  types:
+    tr_asn_partner_type     TYPE RANGE OF char5 .
+  types:
+    tr_asn_description TYPE RANGE OF /rb4r/sd_csp_descr .
+  types:
+    tt_asn_partner  TYPE STANDARD TABLE OF /rb1m/tm_asn_partner .
+  types:
+    tt_asn_partner_type  TYPE STANDARD TABLE OF /RB1M/TM_ASN_PARTNER_TYPE .
+
+  methods GET_DOMAIN_VALUE
+    importing
+      !IV_DOMAIN type DD07L-DOMNAME
+    exporting
+      !ET_RETURN type DD07V_TAB .
+  methods GET_OUTPUT_TYPE_DATA
+    importing
+      !IV_LANGUAGE type SY-LANGU
+    exporting
+      value(ET_OUTPUT_TYPES) type TT_OUTPUT_TYPES .
+  methods GET_COUNTRIES_DATA
+    importing
+      !IV_LANGUAGE type SY-LANGU
+      !IR_COUNTRY type TR_COUNTRY
+      !IR_COUNTRYNAME type TR_COUNTRYNAME
+    exporting
+      value(ET_COUNTIES_DATA) type TT_COUNTRIES .
+  methods GET_SHIPTO_DATA
+    importing
+      !IR_SHIP_TO type TR_SHIPTO
+      !IR_NAME type TR_NAME
+    exporting
+      value(ET_SHIPTO_DATA) type TT_SHIPTO .
+  methods GET_SHIP_POINT_DATA
+    importing
+      !IR_SHIP_POINT type TR_SHIP_POINT
+      !IV_LANGUAGE type SY-LANGU
+      !IR_DESCRIPTION type TR_DESCRIPTION
+    exporting
+      value(ET_SHIP_POINT_DATA) type TT_SHIP_POINT .
+  methods GET_HEADER_DATA
+    importing
+      !IS_DYNAMIC_ENTITY type /RB1M/TM_DYNAMIC_ENTITY
+    exporting
+      !ET_FIELDS_LIST type DDFIELDS
+      !ET_HEADER_DATA type /RB1M/TM_DYNAMIC_HEADER_TT .
+  methods GET_CSP_DATA
+    importing
+      !IR_CSP type TR_CSP
+      !IR_DESCRIPTION type TR_CSP_DESCRIPTION
+    exporting
+      !ET_CSP_DATA type TT_CSP .
+  methods GET_FILTER_FOR_WHERE_CLAUSE
+    importing
+      !IV_TABLE_NAME type STRING
+      !IR_OUTPUT type TR_OUTPUT
+      !IR_CSP type TR_CSP
+      !IR_SHIP_POINT type TR_SHIP_POINT
+      !IR_SHIP_TO type TR_SHIPTO
+      !IR_COUNTRY type TR_COUNTRY
+    exporting
+      !ET_FILTER type TT_FILTER .
+  methods GET_FILTERS_FROM_SERVICE
+    importing
+      !IS_SERVICE type /RB1M/TM_DYNAMIC_ENTITY
+    exporting
+      !ER_SHIP_POINT type TR_SHIP_POINT
+      !ER_SHIP_TO type TR_SHIPTO
+      !ER_CSP type TR_CSP
+      !ER_COUNTRY type TR_COUNTRY
+      !ER_OUTPUT type TR_OUTPUT .
+  methods GET_ACCESS_SEQUENCES
+    importing
+      !IV_OUTPUT_TYPE type PPFDTT
+    exporting
+      !ET_ACCESS_SEQ type TT_ACCESS_SEQ_MAP .
+  methods GET_OUTPUT_DEVICES_DATA
+    importing
+      !IR_DEVICES type TR_DEVICES
+      !IR_DESCRIPTION type TR_DEVICES_DESCRIPTION
+    exporting
+      !ET_DEVICES_DATA type TT_DEVICES .
+  methods VALIDATE_RECEIVED_DATA
+    importing
+      !IT_ITEMS type ANY TABLE
+      !IV_MODE type CHAR1
+      !IV_TABNAME type TABNAME
+    exporting
+      !EV_MSGNO type SY-MSGNO
+      !EV_MSGID type SY-MSGID
+      !EV_MSGTY type SY-MSGTY
+      !EV_MSGV1 type SY-MSGV1
+      !EV_MSGV2 type SY-MSGV2
+      !EV_MSGV3 type SY-MSGV3
+      !EV_MSGV4 type SY-MSGV4
+      !EV_FAILURE type CHAR1 .
+  methods GET_PRINT_TIMEPOINT
+    importing
+      !IV_LANGUAGE type SY-LANGU
+      !IR_PRT_TIMEPOINT type TR_PRT_TIMEPOINT
+      !IR_PRT_TIMEPOINT_TEXT type TR_PRT_TIMEPOINTTEXT
+    exporting
+      !ET_PRT_TIMEPOINT_DATA type TT_PRT_TIMEPOINT .
+  methods GET_PPFACTION_PRINTTIME
+    importing
+      value(IR_OUTPUT_TYPE) type TR_OUTPUT
+    exporting
+      value(ET_PPFACTION_PRTTIME_DATA) type TT_PPFACTION_PRINTTIME .
+  methods GET_ASN_PARTNER
+    importing
+      value(IR_ASN_PARTNER) type TR_ASN_PARTNER optional
+      !IR_ASN_PARTNER_TYPE type TR_ASN_PARTNER_TYPE optional
+      !IR_DESCRIPTION type TR_ASN_DESCRIPTION optional
+    exporting
+      value(ET_ASNPARTNER_DATA) type TT_ASN_PARTNER .
+  methods GET_ASN_PARTNER_TYPE
+    importing
+      !IR_ASN_PARTNER_TYPE type TR_ASN_PARTNER_TYPE optional
+      !IR_DESCRIPTION type TR_ASN_DESCRIPTION optional
+    exporting
+      value(ET_ASNPARTNER_TYPE_DATA) type TT_ASN_PARTNER_TYPE .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_TM_OUTPUT_DATA_PROVID IMPLEMENTATION.
+
+
+  METHOD get_access_sequences.
+    "Fetch data from Access sequence mapping table
+    SELECT OutputType       AS output_type,
+           TableName        AS table_name,
+           TableDescription AS table_description,
+           AccessSequence   AS access_sequence
+           FROM /RB1M/tm_I_acc_map
+           WHERE outputType EQ @iv_output_type
+           INTO TABLE @DATA(lt_acc_seq).
+    IF sy-subrc EQ 0.
+      SORT lt_acc_seq BY access_sequence.
+      IF sy-langu EQ 'D'."German Translations
+        LOOP AT lt_acc_seq ASSIGNING FIELD-SYMBOL(<lfs_acc_seq>).
+          IF <lfs_acc_seq>-Table_name EQ '/RB1M/TM_ACCESS1'.
+            <lfs_acc_seq>-table_description = 'Zugriffsfolge : Versandstelle / Warenempfänger'(001).
+          ELSEIF <lfs_acc_seq>-Table_name EQ '/RB1M/TM_ACCESS2'.
+            <lfs_acc_seq>-table_description = 'Zugriffsfolge : Versandstelle / CSP'(002).
+          ELSEIF <lfs_acc_seq>-Table_name EQ '/RB1M/TM_ACCESS3'.
+            <lfs_acc_seq>-table_description = 'Zugriffsfolge : Versandstelle'(003).
+          ELSEIF <lfs_acc_seq>-Table_name EQ '/RB1M/TM_ACCESS4'.
+            <lfs_acc_seq>-table_description = 'Zugriffsfolge : Versandstelle / Land'(004).
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+      et_access_seq = CORRESPONDING #( lt_acc_seq ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  method GET_ASN_PARTNER.
+    DATA lv_partnernumber TYPE char10.
+    Select Parnum as PARTNERNUMBER, Partyp as PARTNERTYPE
+      FROM /RB1M/TM_I_ASNPartner
+    WHERE Parnum in @ir_asn_partner
+      AND partyp in @ir_asn_partner_type
+     into TABLE @DATA(lt_data).
+    IF sy-subrc is INITIAL.
+      SORT lt_data by PARTNERNUMBER.
+      LOOP AT lt_data ASSIGNING FIELD-SYMBOL(<lfs_data>).
+        CLEAR lv_partnernumber.
+*          lv_partnernumber = | { <lfs_data>-partnernumber ALPHA = OUT } |.
+          CALL FUNCTION 'CONVERSION_EXIT_ALPHA_OUTPUT'
+            EXPORTING
+              input        = <lfs_data>-partnernumber
+           IMPORTING
+             OUTPUT        = lv_partnernumber
+                  .
+          CONDENSE lv_partnernumber NO-GAPS.
+          <lfs_data>-partnernumber = lv_partnernumber.
+      ENDLOOP.
+      et_asnpartner_data = CORRESPONDING #( lt_data ).
+    ENDIF.
+  endmethod.
+
+
+  METHOD get_asn_partner_type.
+    DATA: lt_data TYPE STANDARD TABLE OF /RB1M/TM_ASN_PARTNER_TYPE.
+    SELECT PartnerType AS partnertype, Description AS Description
+      FROM /RB1M/TM_I_ASNPartnerType
+    WHERE PartnerType IN @ir_asn_partner_type
+      AND Description IN @ir_description
+      AND langu = @sy-langu
+     INTO TABLE @lt_data.
+    IF sy-subrc IS INITIAL.
+      SORT lt_data BY partnertype.
+      et_asnpartner_type_data = CORRESPONDING #( lt_data ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_countries_data.
+*    DATA(lv_language) = COND #( WHEN iv_language IS INITIAL
+*                                THEN sy-langu
+*                                ELSE iv_language ).
+*    SELECT DISTINCT a~land1 AS Country,
+*                    b~Spras AS Language,
+*                    b~landx50 AS CountryName
+*                    FROM t005 AS a
+*                    LEFT OUTER JOIN t005t AS b
+*                    ON upper( a~land1 ) EQ upper( b~land1 )
+*                    WHERE b~spras EQ @lv_language
+*                    INTO TABLE @ET_COUNTIES_data.
+* Fetch countries list from CDS View
+    SELECT code AS Country,                             "#EC CI_NOWHERE
+           descripion AS CountryName
+           FROM /rb4c/co_i_countryvh
+           WHERE upper( code ) IN @ir_country AND
+                 upper( Descripion ) IN @ir_countryname
+           INTO TABLE @DATA(lt_countries).
+    IF sy-subrc EQ 0.
+      SORT et_counties_data BY Country.
+      et_counties_data = CORRESPONDING #( lt_countries ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_csp_data.
+    SELECT  CustomerShippingProfile AS csp,
+                    CspDescription AS csp_description
+                       FROM /rb4r/sd_i_csp
+                       WHERE upper( CustomerShippingProfile ) IN @Ir_csp AND
+                             upper( cspDescription ) IN @ir_description
+                       INTO CORRESPONDING FIELDS OF TABLE @et_csp_data.
+    IF sy-subrc EQ 0.
+      SORT et_csp_data BY csp.
+      LOOP AT et_csp_data ASSIGNING FIELD-SYMBOL(<lfs_csp>).
+        TRANSLATE <lfs_csp>-csp TO UPPER CASE.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_filters_from_service.
+    IF is_service IS NOT INITIAL.
+      "Get Filters from service
+      er_ship_point = CORRESPONDING #( is_service-shippointsonav[] ).
+      er_ship_to    = CORRESPONDING #( is_service-Shiptosonav[] ).
+      er_csp        = CORRESPONDING #( is_service-cspsonav[] ).
+      er_country    = CORRESPONDING #( is_service-countrysonav[] ).
+
+      IF er_csp IS NOT INITIAL.
+        LOOP AT er_csp ASSIGNING FIELD-SYMBOL(<lfs_csp>).
+          IF <lfs_csp>-low IS NOT INITIAL.
+            TRANSLATE <lfs_csp>-low TO UPPER CASE.
+          ENDIF.
+          IF <lfs_csp>-high IS NOT INITIAL.
+            TRANSLATE <lfs_csp>-high TO UPPER CASE.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+
+      IF er_ship_point IS NOT INITIAL.
+        LOOP AT er_ship_point ASSIGNING FIELD-SYMBOL(<lfs_ship_point>).
+          IF <lfs_ship_point>-low IS NOT INITIAL.
+            TRANSLATE <lfs_ship_point>-low TO UPPER CASE.
+          ENDIF.
+          IF <lfs_ship_point>-high IS NOT INITIAL.
+            TRANSLATE <lfs_ship_point>-high TO UPPER CASE.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+
+      IF er_country IS NOT INITIAL.
+        LOOP AT er_country ASSIGNING FIELD-SYMBOL(<lfs_country>).
+          IF <lfs_country>-low IS NOT INITIAL.
+            TRANSLATE <lfs_country>-low TO UPPER CASE.
+          ENDIF.
+          IF <lfs_country>-high IS NOT INITIAL.
+            TRANSLATE <lfs_country>-high TO UPPER CASE.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+
+      IF is_service-output_type IS NOT INITIAL.
+        er_output = VALUE tr_output( BASE er_output ( sign   = 'I'
+                                                      option = 'EQ'
+                                                      low    = is_service-output_type ) ).
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_filter_for_where_clause.
+    DATA: ls_filter TYPE /rb4r/plm_tabflt.
+
+    IF ir_output IS NOT INITIAL.
+      LOOP AT ir_output INTO DATA(ls_output).
+        ls_filter-tablename = iv_table_name.
+        ls_filter-FIeldname = 'OUTPUT_TYPE'.
+        ls_filter-sign      = ls_output-sign.
+        ls_filter-opt       = ls_output-option.
+        ls_filter-value     = ls_output-low.
+        APPEND ls_filter TO et_filter.
+      ENDLOOP.
+    ENDIF.
+
+    IF ir_ship_point IS NOT INITIAL.
+      LOOP AT ir_ship_point INTO DATA(ls_ship_point).
+        ls_filter-tablename = iv_table_name.
+        ls_filter-FIeldname = 'SHIPPING_POINT'.
+        ls_filter-sign      = ls_ship_point-sign.
+        ls_filter-opt       = ls_ship_point-option.
+        ls_filter-value     = ls_ship_point-low.
+        APPEND ls_filter TO et_filter.
+      ENDLOOP.
+    ENDIF.
+
+    CASE iv_table_name.
+      WHEN '/RB1M/TM_ACCESS1'.
+        IF ir_ship_to IS NOT INITIAL.
+          LOOP AT ir_ship_TO INTO DATA(ls_ship_TO).
+            ls_filter-tablename = iv_table_name.
+            ls_filter-FIeldname = 'SHIP_TO_PARTY'.
+            ls_filter-sign      = ls_ship_to-sign.
+            ls_filter-opt       = ls_ship_to-option.
+            ls_filter-value     = ls_ship_to-low.
+            APPEND ls_filter TO et_filter.
+          ENDLOOP.
+        ENDIF.
+      WHEN '/RB1M/TM_ACCESS2'.
+        IF ir_csp IS NOT INITIAL.
+          LOOP AT ir_csp INTO DATA(ls_csp).
+            ls_filter-tablename = iv_table_name.
+            ls_filter-fieldname = 'CSP'.
+            ls_filter-sign      = ls_csp-sign.
+            ls_filter-opt       = ls_csp-option.
+            ls_filter-value     = ls_csp-low.
+            APPEND ls_filter TO et_filter.
+          ENDLOOP.
+        ENDIF.
+      WHEN '/RB1M/TM_ACCESS4'.
+        IF ir_country IS NOT INITIAL.
+          LOOP AT ir_country INTO DATA(ls_country).
+            ls_filter-tablename = iv_table_name.
+            ls_filter-fieldname = 'DEST_COUNTRY'.
+            ls_filter-sign      = ls_country-sign.
+            ls_filter-opt       = ls_country-option.
+            ls_filter-value     = ls_country-low.
+            APPEND ls_filter TO et_filter.
+          ENDLOOP.
+        ENDIF.
+      WHEN OTHERS.
+    ENDCASE.
+  ENDMETHOD.
+
+
+  METHOD get_header_data.
+    DATA: lr_data     TYPE REF TO data,
+          lt_comp_tab TYPE cl_abap_structdescr=>component_table,
+          ls_comp_fld TYPE cl_abap_structdescr=>component,
+          ls_header   TYPE /rb1m/tm_dynamic_header.
+* Local field symbols declarations
+    FIELD-SYMBOLS: <lfs_table>      TYPE STANDARD TABLE,
+                   <lfs_table_line> TYPE any,
+                   <lfs_struct>     TYPE any.
+    " Get Dynamic table structure
+    DATA(lo_structdescr) = CAST cl_abap_structdescr( cl_abap_structdescr=>describe_by_name( is_dynamic_entity-Table_name ) ).
+    DATA(lt_fieldlist)   = lo_structdescr->get_ddic_field_list(  ).
+    IF lt_fieldlist IS NOT INITIAL.
+      DELETE lt_fieldlist WHERE Fieldname EQ 'MANDT'.
+    ENDIF.
+    lt_comp_tab          = lo_structdescr->get_components( ).
+
+    IF lt_fieldlist IS NOT INITIAL.
+      et_fields_list = lt_fieldlist.
+    ENDIF.
+
+    "Define Dynamic Table and Work Area based on table name received
+    CREATE DATA lr_data TYPE STANDARD TABLE OF (is_dynamic_entity-Table_name).
+    ASSIGN lr_data->* TO <lfs_table>.
+
+    CREATE DATA lr_data LIKE LINE OF <lfs_table>.
+    ASSIGN lr_data->* TO <lfs_table_line>.
+
+    DATA(lv_index) = 1.
+    "Fill Dynamic header
+    LOOP AT lt_comp_tab ASSIGNING FIELD-SYMBOL(<lfs_comp_tab>) WHERE name <> 'MANDT'.
+      DATA(ls_fieldlist) = VALUE #( lt_fieldlist[ FIeldname = <lfs_comp_tab>-name ] OPTIONAL ).
+      IF sy-subrc EQ 0 AND ls_fieldlist IS NOT INITIAL.
+        ls_header-output_type  = is_dynamic_entity-output_type.
+        ls_header-Table_name   = is_dynamic_entity-Table_name.
+        ls_header-title        = is_dynamic_entity-title.
+        ls_header-header_index = lv_index.
+        ls_header-header_key   = ls_fieldlist-keyflag.
+        ls_header-header_name  = ls_fieldlist-FIeldname.
+        ls_header-header_type  = 'String'.
+        ls_header-header_value = ls_fieldlist-scrtext_m.
+        APPEND ls_header TO et_header_data.
+      ENDIF.
+      lv_index = lv_index + 1.
+      CLEAR: ls_header, ls_fieldlist.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD get_output_devices_data.
+    SELECT Lname AS OutputDevice,
+                    pamsg AS Description
+                    FROM sh_prin  " #EC CI_GENBUFF
+                    WHERE upper( lname )  IN @ir_devices AND
+                          upper( pamsg )  IN @ir_description
+                        INTO TABLE @DATA(lt_devices).
+    IF sy-subrc EQ 0.
+      et_devices_data = CORRESPONDING #( lt_devices ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_output_type_data.
+*    DATA(lv_language) = COND #( WHEN iv_language IS INITIAL
+*                                THEN sy-langu
+*                                ELSE iv_language ).
+*    SELECT DISTINCT a~output_type,
+*                    b~langu AS Language,
+*                    b~text AS description
+*                    FROM /rb1m/tm_acc_map AS a
+*                    LEFT OUTER JOIN ppftttcut AS b
+*                    ON a~output_type EQ b~name
+*                    INTO TABLE @et_output_types
+*                    WHERE langu EQ @lv_language.
+    SELECT OutputType AS Output_type,  "#EC CI_NOWHERE
+           Description
+           FROM /rb1m/tm_i_outputtype_VH
+           INTO TABLE @DATA(lt_output_types).
+    IF sy-subrc EQ 0.
+      et_output_types = CORRESPONDING #( lt_output_types ).
+      SORT et_output_types BY output_type.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_ppfaction_printtime.
+
+    SELECT OutputType AS output_type,PrintTimepoint AS print_timepoint,kappl
+      FROM /rb1m/tm_i_ppfact_prt_timepnt
+     WHERE OutputType IN @ir_output_type
+     INTO TABLE @DATA(lt_ppfaction).
+    IF sy-subrc IS INITIAL.
+      SORT lt_ppfaction BY output_type.
+      et_ppfaction_prttime_data = CORRESPONDING #( lt_ppfaction ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  method GET_PRINT_TIMEPOINT.
+* Fetch countries list from CDS View
+    SELECT PrintTimepoint as Print_Timepoint,Language as SPRAS,Text
+           FROM /RB1M/TM_I_PRINT_TIMEPOINT
+           WHERE upper( PrintTimepoint ) IN @ir_prt_timepoint AND
+                 upper( Text ) IN @ir_prt_timepoint_text
+                 AND language = @iv_language
+           INTO TABLE @DATA(LT_PRINT_TIMEPOINT).
+    IF sy-subrc EQ 0.
+      SORT LT_PRINT_TIMEPOINT BY Print_Timepoint.
+      ET_PRT_TIMEPOINT_DATA = CORRESPONDING #( LT_PRINT_TIMEPOINT ).
+    ENDIF.
+  endmethod.
+
+
+  METHOD get_shipto_data.
+
+    "Get Ship-to-Party data from CDS View
+    SELECT customer AS Ship_To,  "#EC CI_DB_OPERATION_OK[3067314]
+                    organizationbpname1 AS Description      "#EC CI_USAGE_OK[3067314]
+                    FROM i_customer_vh
+                    WHERE customer IN @ir_ship_to AND
+                          upper( organizationbpname1 ) IN @ir_name "#EC CI_USAGE_OK[3067314]
+                    INTO TABLE @et_shipto_data.
+    IF sy-subrc EQ 0.
+      SORT et_shipto_data BY ship_to.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_ship_point_data.
+*    DATA(lv_language) = COND #( WHEN iv_language IS INITIAL
+*                                THEN sy-langu
+*                                ELSE iv_language ).
+    " Fetch Shipping points from Master data table
+*    SELECT DISTINCT a~vstel AS Ship_Point,
+*                    b~spras AS Language,
+*                    b~vtext AS Description
+*                    FROM tvst AS a
+*                    LEFT OUTER JOIN tvstt AS b
+*                    ON a~vstel EQ b~vstel
+*                    WHERE upper( a~vstel ) IN @ir_ship_point AND
+*                          b~spras EQ @lv_language AND
+*                          upper( b~vtext ) IN @ir_description
+*                    INTO TABLE @et_ship_point_data.
+*    IF sy-subrc NE 0.
+*      lv_language = 'EN'.
+*      " Fetch Shipping points from Master data table
+*      SELECT DISTINCT a~vstel AS Ship_Point,
+*                      b~spras AS Language,
+*                      b~vtext AS Description
+*                      FROM tvst AS a
+*                      LEFT OUTER JOIN tvstt AS b
+*                      ON b~vstel EQ a~vstel
+*                      WHERE upper( a~vstel ) IN @ir_ship_point AND
+*                            b~spras EQ @lv_language AND
+*                            upper( b~vtext ) IN @ir_description
+*                      INTO TABLE @et_ship_point_data.
+*    ENDIF.
+    SELECT shippingpoint AS Ship_Point,
+           shorttext AS Description
+           FROM /rb4c/xl_i_shippingpoint
+           WHERE upper( shippingpoint ) IN @ir_ship_point AND
+                 upper( shorttext )     IN @ir_description
+      INTO CORRESPONDING FIELDS OF TABLE @et_ship_point_data.
+    IF sy-subrc eq 0 and et_ship_point_data IS NOT INITIAL.
+      SORT et_ship_point_data BY Ship_Point.
+      LOOP AT et_ship_point_data ASSIGNING FIELD-SYMBOL(<lfs_data>).
+        TRANSLATE <lfs_data>-Ship_Point TO UPPER CASE.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD validate_received_data.
+    DATA: lv_fieldname TYPE fnam_____4,
+          lv_kunnr     TYPE kunnr,
+          lt_failure   TYPE STANDARD TABLE OF ddfkeyrc.
+* Validate received data in case of Update or create.
+    IF iv_mode EQ 'U' OR iv_mode EQ 'I'.
+      "Fetch check tables details for all the fields of the custom table
+      SELECT fieldname, keyflag, rollname, checktable FROM dd03L
+                                                      WHERE Tabname   EQ @iv_tabname AND
+                                                            checktable IS NOT INITIAL
+                                                      INTO TABLE @DATA(lt_check_tables).
+      IF sy-subrc EQ 0.
+        DELETE lt_check_tables WHERE fieldname EQ 'MANDT'. "MANDT data need not be checked
+        IF iv_mode EQ 'U'."In case of update no need to check key fields data
+          DELETE lt_check_tables WHERE keyflag EQ abap_true.
+        ENDIF.
+      ENDIF.
+
+      LOOP AT it_items ASSIGNING FIELD-SYMBOL(<lfs_items>).
+        LOOP AT lt_check_tables ASSIGNING FIELD-SYMBOL(<lfs_check_tables>).
+          ASSIGN COMPONENT <lfs_check_tables>-fieldname OF STRUCTURE <lfs_items> TO FIELD-SYMBOL(<lfs_field_value>).
+          IF <lfs_field_value> IS ASSIGNED.
+            IF <lfs_check_tables>-fieldname = 'SHIP_TO_PARTY'.
+              lv_kunnr = <lfs_field_value>.
+              lv_kunnr = |{ lv_kunnr ALPHA = IN }|.
+              ASSIGN lv_kunnr to <lfs_field_value>.
+            ENDIF.
+            CLEAR: lv_fieldname.
+            lv_fieldname = <lfs_check_tables>-fieldname.
+            "Validate field value against check table using below FM
+            CALL FUNCTION 'DDUT_INPUT_CHECK'
+              EXPORTING
+                tabname       = iv_tabname
+                fieldname     = lv_fieldname
+                value         = <lfs_field_value>
+              IMPORTING
+                msgid         = sy-msgid
+                msgty         = sy-msgty
+                msgno         = sy-msgno
+                msgv1         = sy-msgv1
+                msgv2         = sy-msgv2
+                msgv3         = sy-msgv3
+                msgv4         = sy-msgv4
+              TABLES
+                failure_tab   = lt_failure
+              EXCEPTIONS
+                no_ddic_field = 1
+                illegal_move  = 2
+                OTHERS        = 3.
+            IF lt_failure IS NOT INITIAL.
+              EXIT.
+            ENDIF.
+          ENDIF.
+          UNASSIGN: <lfs_field_value>.
+        ENDLOOP.
+        IF lt_failure IS NOT INITIAL.
+          EXIT.
+        ENDIF.
+      ENDLOOP.
+      IF lt_failure IS NOT INITIAL.
+        ev_failure = abap_true.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD get_domain_value.
+    DATA lt_dd07v TYPE STANDARD TABLE OF dd07v.
+
+    CALL FUNCTION 'DD_DOMVALUES_GET'
+      EXPORTING
+        domname        = iv_domain
+        text           = 'X'
+        langu          = 'E'
+      TABLES
+        dd07v_tab      = lt_dd07v
+      EXCEPTIONS
+        wrong_textflag = 1
+        OTHERS         = 2.
+    IF sy-subrc IS INITIAL.
+      et_return = CORRESPONDING #( lt_dd07v ).
+    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
