@@ -1,0 +1,3084 @@
+class /RB1M/CL_SD_PRINTOUT_UTIL definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces /RB1M/IF_SD_PRINTOUT_UTIL .
+
+  class-data MV_JOB_NAME type BTCJOB .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_PRINTOUT_UTIL IMPLEMENTATION.
+
+
+METHOD /rb1m/if_sd_printout_util~create_excel_xml.
+  DATA: lo_excel     TYPE REF TO /rb4c/cl_ca_a2xl,
+        lo_worksheet TYPE REF TO /rb4c/cl_ca_a2xl_worksheet,
+        lo_style     TYPE REF TO /rb4c/cl_ca_a2xl_style,
+        lo_column    TYPE REF TO /rb4c/cl_ca_a2xl_column,
+        lo_row       TYPE REF TO /rb4c/cl_ca_a2xl_row,
+        lv_date_str  TYPE char10.
+  DATA: lv_c_vemng(7)  TYPE c,
+        lv_c_brgew(10) TYPE c,
+        lv_c_ntgew(10) TYPE c,
+        lv_c_laeng(7)  TYPE c,
+        lv_c_breit(7)  TYPE c,
+        lv_c_hoehe(7)  TYPE c.
+  DATA: lv_letter2(2)  TYPE c.
+
+
+  CREATE OBJECT lo_excel.
+  lo_worksheet = lo_excel->get_active_worksheet( ).
+
+  lo_style               = lo_excel->add_new_style( ).
+  lo_style->alignment->vertical = /rb4c/cl_ca_a2xl_style_alignme=>c_vertical_bottom.
+  lo_style->font->bold   = abap_true.
+  lo_style->font->name   = /rb4c/cl_ca_a2xl_style_font=>c_name_arial.
+  lo_style->font->family = /rb4c/cl_ca_a2xl_style_font=>c_family_swiss.
+  lo_style->font->color-rgb  = /rb4c/cl_ca_a2xl_style_color=>c_red.
+  lo_style->number_format->format_code = /rb4c/cl_ca_a2xl_style_number_=>c_format_text.
+  DATA(lv_default_style) = lo_style->get_guid( ).
+
+  lo_style               = lo_excel->add_new_style( ).
+  lo_style->number_format->format_code = /rb4c/cl_ca_a2xl_style_number_=>c_format_text.
+  DATA(lv_style_s62) = lo_style->get_guid( ).
+  lo_style               = lo_excel->add_new_style( ).
+  lo_style->font->bold  = abap_true.
+  lo_style->number_format->format_code = /rb4c/cl_ca_a2xl_style_number_=>c_format_text.
+  lo_style->font->name   = /rb4c/cl_ca_a2xl_style_font=>c_name_arial.
+  lo_style->font->family = /rb4c/cl_ca_a2xl_style_font=>c_family_swiss.
+  lo_style->font->color-rgb  = /rb4c/cl_ca_a2xl_style_color=>c_red.
+  DATA(lv_style_s63) = lo_style->get_guid( ).
+  lo_style               = lo_excel->add_new_style( ).
+  lo_style->alignment->vertical = /rb4c/cl_ca_a2xl_style_alignme=>c_vertical_bottom.
+  lo_style->alignment->wraptext     = abap_true.
+  DATA(lv_style_s64) = lo_style->get_guid( ).
+  lo_style               = lo_excel->add_new_style( ).
+  lo_style->number_format->format_code = /rb4c/cl_ca_a2xl_style_number_=>c_format_number_00.
+  DATA(lv_style_s65) = lo_style->get_guid( ).
+  lo_style               = lo_excel->add_new_style( ).
+  lo_style->number_format->format_code = /rb4c/cl_ca_a2xl_style_number_=>c_format_number.
+  DATA(lv_style_s66) = lo_style->get_guid( ).
+*   style for each cell of content
+  lo_style               = lo_excel->add_new_style( ).
+  lo_style->number_format->format_code = /rb4c/cl_ca_a2xl_style_number_=>c_format_text.
+  DATA(lv_cell_style) = lo_style->get_guid( ).
+  TRY.
+      lo_worksheet->/rb4c/if_ca_a2xl_sheet_protect~protected  = /rb4c/if_ca_a2xl_sheet_protect=>c_protected.
+
+      lo_row = lo_worksheet->get_row( 1 ).
+      lo_row->set_row_height( 15 ).
+
+      lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = 'Supplier no.'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'B' ip_row = 1 ip_value = 'Delivery note'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'C' ip_row = 1 ip_value = 'Consignment Order'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'D' ip_row = 1 ip_value = 'Freight order'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'E' ip_row = 1 ip_value = 'Shipping date'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'F' ip_row = 1 ip_value = 'Customer order no.'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'G' ip_row = 1 ip_value = 'Bosch order no.'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'H' ip_row = 1 ip_value = 'No. of parcels'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'I' ip_row = 1 ip_value = 'Means of transport'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'J' ip_row = 1 ip_value = 'Pick up place'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'K' ip_row = 1 ip_value = 'Recipient'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'L' ip_row = 1 ip_value = 'Unloading point'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'M' ip_row = 1 ip_value = 'Receiving point'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'N' ip_row = 1 ip_value = 'Carrier'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'O' ip_row = 1 ip_value = 'Carrier Country Code'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'P' ip_row = 1 ip_value = 'Carrier VAT number'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'Q' ip_row = 1 ip_value = 'Executing Carrier'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'R' ip_row = 1 ip_value = 'Executing Carrier Country Code'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'S' ip_row = 1 ip_value = 'Executing Carrier VAT number'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'T' ip_row = 1 ip_value = 'Container ID'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'U' ip_row = 1 ip_value = 'Commodity code/tariff code'  ip_style = lv_style_s63 ).
+*       For future requirement
+*        lo_worksheet->set_cell( ip_column = 'S' ip_row = 1 ip_value = 'Truck License plate number'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'V' ip_row = 1 ip_value = 'Driver Name'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'W' ip_row = 1 ip_value = 'Customer material'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'X' ip_row = 1 ip_value = 'Material description'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'Y' ip_row = 1 ip_value = 'Quantity'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'Z' ip_row = 1 ip_value = 'Bosch material no.'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'AA' ip_row = 1 ip_value = 'Handling Unit'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'AB' ip_row = 1 ip_value = 'Sub HU'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'AC' ip_row = 1 ip_value = 'Gross weight'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'AD' ip_row = 1 ip_value = 'Net weight'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'AE' ip_row = 1 ip_value = 'Length'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'AF' ip_row = 1 ip_value = 'Width'  ip_style = lv_style_s63 ).
+      lo_worksheet->set_cell( ip_column = 'AG' ip_row = 1 ip_value = 'Height'  ip_style = lv_style_s63 ).
+
+      DATA(lv_count) = 0.
+      DATA(lv_ext)  = 0.
+
+      DO 33 TIMES.
+        IF lv_count < 26.
+          lv_letter2 = sy-abcde+lv_count(1).
+        ELSE.
+          DATA(lv_a) = 0.
+          DATA(lv_letter_x) = sy-abcde+lv_a(1).
+          DATA(lv_letter_y) = sy-abcde+lv_ext(1).
+          lv_letter2 = |{ lv_letter_x }| && |{ lv_letter_y }| .
+          lv_ext += 1.
+        ENDIF.
+        CASE lv_letter2.
+          WHEN 'C' OR 'E' OR 'M' OR 'D' OR 'G' OR 'H' OR 'Y' OR 'Z' OR 'O'.
+            DATA(lv_width) = 20.
+          WHEN 'N' OR 'K' OR 'J' OR 'X'  OR 'P' OR 'Q' OR 'R' OR 'S'.
+            lv_width = 30.
+          WHEN 'AA' OR 'AB'.
+            lv_width = 40.
+          WHEN OTHERS.
+            lv_width = 15.
+        ENDCASE.
+        lo_column = lo_worksheet->get_column( lv_letter2 ).
+        lo_column->set_auto_size( ip_auto_size = abap_false ).
+
+        lo_column->set_width( lv_width ).
+        lv_count += 1.
+      ENDDO.
+
+* Data
+      LOOP AT it_item_data INTO DATA(ls_item_data).
+        WRITE ls_item_data-vemng TO lv_c_vemng DECIMALS 0 NO-GROUPING LEFT-JUSTIFIED.
+        IF ls_item_data-vemng IS INITIAL. lv_c_vemng = space. ENDIF.
+        WRITE ls_item_data-brgew TO lv_c_brgew DECIMALS 3 NO-GROUPING LEFT-JUSTIFIED.
+        TRANSLATE lv_c_brgew USING ',.'.
+        IF ls_item_data-brgew IS INITIAL. lv_c_brgew = space. ENDIF.
+        WRITE ls_item_data-ntgew TO lv_c_ntgew DECIMALS 3 NO-GROUPING LEFT-JUSTIFIED.
+        TRANSLATE lv_c_ntgew USING ',.'.
+        IF ls_item_data-ntgew IS INITIAL. lv_c_ntgew = space. ENDIF.
+        WRITE ls_item_data-laeng TO lv_c_laeng DECIMALS 0 NO-GROUPING LEFT-JUSTIFIED.
+        IF ls_item_data-laeng IS INITIAL. lv_c_laeng = space. ENDIF.
+        WRITE ls_item_data-breit TO lv_c_breit DECIMALS 0 NO-GROUPING LEFT-JUSTIFIED.
+        IF ls_item_data-breit IS INITIAL. lv_c_breit = space. ENDIF.
+        WRITE ls_item_data-hoehe TO lv_c_hoehe DECIMALS 0 NO-GROUPING LEFT-JUSTIFIED.
+        IF ls_item_data-hoehe IS INITIAL. lv_c_hoehe = space. ENDIF.
+        IF ls_item_data-anzpk = 0. ls_item_data-anzpk = space. ENDIF.
+        IF ls_item_data-wadat = 0. ls_item_data-wadat = space. ENDIF.
+        IF ls_item_data-carriername IS INITIAL. ls_item_data-carriername = space. ENDIF.
+        IF ls_item_data-execarriername IS INITIAL. ls_item_data-execarriername = space. ENDIF.
+        IF ls_item_data-land1_sp IS INITIAL. ls_item_data-land1_sp = space. ENDIF.
+        IF ls_item_data-stceg IS INITIAL. ls_item_data-stceg = space. ENDIF.
+        IF ls_item_data-land1_sp_execarrier IS INITIAL. ls_item_data-land1_sp_execarrier = space. ENDIF.
+        IF ls_item_data-stceg_execarrier IS INITIAL. ls_item_data-stceg_execarrier = space. ENDIF.
+        IF ls_item_data-signi IS INITIAL. ls_item_data-signi = space. ENDIF.
+        IF ls_item_data-itm_comco IS INITIAL. ls_item_data-itm_comco = space. ENDIF.
+
+
+        DATA(lv_index) = sy-tabix + 1.
+        lo_row = lo_worksheet->get_row( lv_index ).
+        lo_row->set_row_height( 13 ).
+        lo_worksheet->set_cell( ip_column = 'A' ip_row = lv_index ip_value = ls_item_data-eikto ip_style = lv_cell_style ).
+
+        lo_worksheet->set_cell( ip_column = 'B' ip_row = lv_index ip_value = ls_item_data-vbeln ip_style = lv_cell_style ).
+
+        lo_worksheet->set_cell( ip_column = 'C' ip_row = lv_index ip_value = ls_item_data-codoc ip_style = lv_cell_style ).
+
+        lo_worksheet->set_cell( ip_column = 'D' ip_row = lv_index ip_value = ls_item_data-fodoc ip_style = lv_cell_style ).
+        lv_date_str = |{ ls_item_data-wadat+0(4) }| && |{ ls_item_data-wadat+4(2) }| && |{ ls_item_data-wadat+6(2) }|.
+        lo_worksheet->set_cell( ip_column = 'E' ip_row = lv_index ip_value = lv_date_str ip_style = lv_style_s62 ).
+        lo_worksheet->set_cell( ip_column = 'F' ip_row = lv_index ip_value = ls_item_data-bstnk ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'G' ip_row = lv_index ip_value = ls_item_data-vgbel ip_style = lv_cell_style ).
+        DATA(lv_anzpk) = |{ ls_item_data-anzpk ALPHA = IN }|.
+        IF lv_anzpk = space.
+          lo_worksheet->set_cell( ip_column = 'H' ip_row = lv_index ip_value = lv_anzpk ip_style = lv_style_s62 ).
+        ELSE.
+          lo_worksheet->set_cell( ip_column = 'H' ip_row = lv_index ip_value = lv_anzpk ip_style = lv_style_s66 ).
+
+        ENDIF.
+        lo_worksheet->set_cell( ip_column = 'I' ip_row = lv_index ip_value = ls_item_data-vsartbez ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'J' ip_row = lv_index ip_value = ls_item_data-adrvst ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'K' ip_row = lv_index ip_value = ls_item_data-adrkun ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'L' ip_row = lv_index ip_value = ls_item_data-ablad  ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'M' ip_row = lv_index ip_value = ls_item_data-empst ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'N' ip_row = lv_index ip_value = ls_item_data-carriername ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'O' ip_row = lv_index ip_value = ls_item_data-land1_sp ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'P' ip_row = lv_index ip_value = ls_item_data-stceg ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'Q' ip_row = lv_index ip_value = ls_item_data-execarriername ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'R' ip_row = lv_index ip_value = ls_item_data-land1_sp_execarrier ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'S' ip_row = lv_index ip_value = ls_item_data-stceg_execarrier ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'T' ip_row = lv_index ip_value = ls_item_data-signi ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'U' ip_row = lv_index ip_value = ls_item_data-itm_comco ip_style = lv_cell_style ).
+*          lo_worksheet->set_cell( ip_column = 'S' ip_row = lv_index ip_value = ls_item_data-missingfield ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'V' ip_row = lv_index ip_value = ls_item_data-exti1 ip_style = lv_cell_style ).
+
+        lo_worksheet->set_cell( ip_column = 'W' ip_row = lv_index ip_value = ls_item_data-kdmat ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'X' ip_row = lv_index ip_value = ls_item_data-arktx ip_style = lv_cell_style ).
+        IF lv_c_vemng = space.
+          lo_worksheet->set_cell( ip_column = 'Y' ip_row = lv_index ip_value = lv_c_vemng ip_style = lv_style_s62 ).
+        ELSE.
+          lo_worksheet->set_cell( ip_column = 'Y' ip_row = lv_index ip_value = lv_c_vemng ip_style = lv_style_s66 ).
+
+        ENDIF.
+        lo_worksheet->set_cell( ip_column = 'Z' ip_row = lv_index ip_value = ls_item_data-matnr ip_style = lv_style_s62 ).
+        lo_worksheet->set_cell( ip_column = 'AA' ip_row = lv_index ip_value = ls_item_data-exidv ip_style = lv_cell_style ).
+        lo_worksheet->set_cell( ip_column = 'AB' ip_row = lv_index ip_value = ls_item_data-subhu ip_style = lv_style_s64 ).
+        IF lv_c_brgew = space.
+          lo_worksheet->set_cell( ip_column = 'AC' ip_row = lv_index ip_value = lv_c_brgew ip_style = lv_style_s62 ).
+        ELSE.
+          lo_worksheet->set_cell( ip_column = 'AC' ip_row = lv_index ip_value = lv_c_brgew ip_style = lv_style_s66 ).
+        ENDIF.
+        IF lv_c_ntgew = space.
+          lo_worksheet->set_cell( ip_column = 'AD' ip_row = lv_index ip_value = lv_c_ntgew ip_style = lv_style_s66 ).
+        ELSE.
+          lo_worksheet->set_cell( ip_column = 'AD' ip_row = lv_index ip_value = lv_c_ntgew ip_style = lv_style_s65 ).
+        ENDIF.
+        IF lv_c_laeng = space.
+          lo_worksheet->set_cell( ip_column = 'AE' ip_row = lv_index ip_value = lv_c_laeng ip_style = lv_style_s62 ).
+        ELSE.
+          lo_worksheet->set_cell( ip_column = 'AE' ip_row = lv_index ip_value = lv_c_laeng ip_style = lv_style_s66 ).
+
+
+        ENDIF.
+        IF lv_c_breit = space.
+          lo_worksheet->set_cell( ip_column = 'AF' ip_row = lv_index ip_value = lv_c_breit ip_style = lv_style_s62 ).
+        ELSE.
+          lo_worksheet->set_cell( ip_column = 'AF' ip_row = lv_index ip_value = lv_c_breit ip_style = lv_style_s66 ).
+        ENDIF.
+        IF lv_c_hoehe = space.
+          lo_worksheet->set_cell( ip_column = 'AG' ip_row = lv_index ip_value = lv_c_hoehe ip_style = lv_style_s62 ).
+        ELSE.
+          lo_worksheet->set_cell( ip_column = 'AG' ip_row = lv_index ip_value = lv_c_hoehe ip_style = lv_style_s66 ).
+        ENDIF.
+      ENDLOOP.
+    CATCH /rb4c/cx_ca_a2xl.
+
+  ENDTRY.
+  IF lo_excel IS BOUND .
+    eo_excel ?= lo_excel.
+  ENDIF.
+ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~merge_pdf_per_co.
+    DATA: lv_pdf_size_wbs TYPE so_obj_len,
+          lv_datasize     TYPE so_obj_len,
+          lv_pdf_size_lfg TYPE so_obj_len,
+          lv_subject      TYPE so_obj_des,
+          lv_subject2     TYPE string,
+          lt_text         TYPE soli_tab,
+          lt_text_html    TYPE string,
+          lv_text         TYPE soli,
+          lo_recipient    TYPE REF TO if_recipient_bcs,
+          lv_sent_to_all  TYPE os_boolean,
+          lo_send_request TYPE REF TO cl_bcs.
+
+    DATA:
+      lv_error_text      TYPE string,
+      lv_rc              TYPE i,
+      lv_merged_document TYPE xstring,
+      lo_document        TYPE REF TO cl_document_bcs,
+      lo_pdf_merger      TYPE REF TO cl_rspo_pdf_merge,
+      ls_formoutput      TYPE fpformoutput,
+      lv_pdf_content_wbs TYPE solix_tab,
+      lv_pdf_content_lfg TYPE solix_tab,
+      lv_email           TYPE adr6-smtp_addr.
+    DATA: lw_document  TYPE xstring,
+          lt_data2mail TYPE /rb1m/sd_t_pdf_data2mail.
+    DATA: lt_freightorder TYPE /rb1m/cl_sd_printout_d_mpc_ext=>tt_freightorder.
+    DATA: lo_writer TYPE REF TO /rb4c/if_ca_a2xl_writer.
+    DATA: lt_attachment_header  TYPE soli_tab,
+          ls_attachment_header  LIKE LINE OF lt_attachment_header,
+          lv_attachment_subject TYPE sood-objdes,
+          lv_bytecount          TYPE sood-objlen.
+    DATA:lv_xml_data TYPE xstring,
+         lt_xml      TYPE solix_tab.
+    DATA: lv_title(20)            TYPE c,
+          lv_title_translated(20) TYPE c.
+    CONSTANTS:
+      lc_beginhtmltag TYPE char30 VALUE ' <html> <body> ',
+      lc_endhtmltag   TYPE char30 VALUE ' </body> </html> '.
+
+    IF it_body_text IS NOT INITIAL.
+      lt_text = it_body_text.
+    ELSE.
+      lt_text_html = iv_body_html.
+      lt_text_html = lc_beginhtmltag && lt_text_html.
+    ENDIF.
+*   Check if the language from Front End of PDF2Mail App is different than sy-langu
+*   Background processing is setting always to system language.....
+    IF is_deepdata_data2mail-email_language NE sy-langu.
+      SET LANGUAGE is_deepdata_data2mail-email_language.
+      lv_title_translated = TEXT-002.
+      SET LANGUAGE sy-langu.
+    ELSE.
+      lv_title_translated = TEXT-002.
+
+    ENDIF.
+
+    IF iv_export_excel EQ abap_true .
+      lt_freightorder = CORRESPONDING #( it_pdf_data MAPPING codocument = codocument
+                                                            freightorderdocument = freightorderdocument
+                                                            deliverydocument = vbeln
+                                                            freightorderunit = fudocument
+                                                            carrier = carrier ).
+      DELETE lt_freightorder WHERE deliverydocument+0(2) = '00'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = '7'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = 'A'.
+      SORT lt_freightorder.
+      DELETE ADJACENT DUPLICATES FROM lt_freightorder.
+    ENDIF.
+    DATA(lv_co) = VALUE #( it_pdf_data[ 1 ]-codocument OPTIONAL ).
+    lt_data2mail = CORRESPONDING #( it_pdf_data ).
+    LOOP AT it_pdf_data INTO DATA(ls_tmp1).
+      CLEAR: lt_text_html.
+      CHECK lt_data2mail IS NOT INITIAL.
+      TRY.
+          CREATE OBJECT lo_pdf_merger.
+          CREATE OBJECT lo_document.
+
+        CATCH cx_rspo_pdf_merge cx_document_bcs.
+          MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+          APPEND VALUE #( type = 'E'
+                               message = TEXT-007   " Document creation failed !
+                      )
+                TO et_return.
+          EXIT.
+      ENDTRY.
+      IF ls_tmp1-codocument EQ lv_co.
+*          Subject
+        lv_title = lv_title_translated . " Bosch shipment
+        lv_subject = lv_title  && | | &&  ls_tmp1-codocument .
+        TRY.
+            CREATE OBJECT lo_document.
+            CREATE OBJECT lo_pdf_merger.
+
+          CATCH cx_rspo_pdf_merge cx_document_bcs.
+            MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+            APPEND VALUE #( type = 'E'
+                                 message = TEXT-007   " Document creation failed !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+        lt_text_html = iv_body_html.
+        lt_text_html = lc_beginhtmltag && lt_text_html.
+
+        DATA(lv_string) = TEXT-004 && | | && is_shippingpoint_adrs-name1 && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-name2 && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-stras && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-pstlz && | | && is_shippingpoint_adrs-ort01 && | | && TEXT-005.
+        lt_text_html = lt_text_html && lv_string.
+        lt_text_html = lt_text_html && lc_endhtmltag.
+        lt_text = cl_bcs_convert=>string_to_soli( lt_text_html ).
+        TRY.
+            IF it_body_text IS NOT INITIAL.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'RAW'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ELSE.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'HTM'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ENDIF.
+          CATCH cx_document_bcs.
+            MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+            APPEND VALUE #( type = 'E'
+                                 message = TEXT-007   " Document creation failed !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+*           Export Excel
+        IF iv_export_excel EQ abap_true .
+          CLEAR : lt_xml,lt_attachment_header, lv_subject, lv_xml_data ,
+                  lv_bytecount, lv_attachment_subject, ls_attachment_header.
+
+          DATA(lt_co_excel) = lt_freightorder.
+          DELETE lt_co_excel WHERE codocument NE ls_tmp1-codocument.
+          DATA(ls_do_exist) = VALUE #( lt_co_excel[ deliverydocument = ls_tmp1-vbeln ]-deliverydocument OPTIONAL ).
+          IF lt_co_excel IS NOT INITIAL.
+
+            CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_excel_data
+              EXPORTING
+                it_freightorder       = lt_co_excel
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                eo_excel              = DATA(lo_excel).
+
+            DELETE ADJACENT DUPLICATES FROM lt_co_excel COMPARING codocument.
+            DATA(lv_line) = lines( lt_co_excel ).
+            CREATE OBJECT lo_writer TYPE /rb4c/cl_ca_a2xl_writer_2007.
+            IF lo_excel IS BOUND.
+              TRY.
+                  lv_xml_data = lo_writer->write_file( lo_excel ).
+
+                CATCH /rb4c/cx_ca_a2xl.
+                  MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                                       message = TEXT-007   " Document creation failed !
+                              )
+                        TO et_return.
+              ENDTRY.
+              lv_bytecount = xstrlen( lv_xml_data ).
+              IF lv_xml_data IS NOT INITIAL.
+                TRY.
+                    lt_xml = COND #( WHEN lv_xml_data IS NOT INITIAL
+                                               THEN  cl_bcs_convert=>xstring_to_solix( iv_xstring  = lv_xml_data  ) ).
+                  CATCH cx_bcs.
+                    MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                    APPEND VALUE #( type = 'E'
+                                         message = TEXT-007   " Document creation failed !
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+            IF lt_xml IS NOT INITIAL.
+              lv_subject = COND #( WHEN lv_line > 1 THEN lv_title_translated
+                                   ELSE 'CO_' && ls_tmp1-codocument ).
+
+              TRY.
+                  lv_attachment_subject  = lv_subject && '.xlsx'.
+                  CONCATENATE '&SO_FILENAME=' lv_attachment_subject INTO ls_attachment_header.
+                  APPEND ls_attachment_header TO lt_attachment_header.
+                  lo_document->add_attachment(
+                                          i_attachment_type    = 'XLS'
+                                          i_att_content_hex    = lt_xml
+                                          i_attachment_size    = lv_bytecount
+                                          i_attachment_header  = lt_attachment_header
+                                          i_attachment_subject = lv_subject ).
+
+                CATCH cx_document_bcs.
+                  MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                                       message = TEXT-007   " Document creation failed !
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ELSE.
+            APPEND VALUE #( type = 'W'
+                       message = TEXT-008 && | | && ls_tmp1-codocument ) TO et_return.
+            " No data attached to Delivery Note Application V2 for CO number
+          ENDIF.
+        ENDIF.
+*           Export Excel
+        LOOP AT lt_data2mail  INTO DATA(ls_pdf_data) WHERE codocument = ls_tmp1-codocument
+                                                       AND tbpdf-pdf IS NOT INITIAL
+                                                          GROUP BY  ( codocument = ls_pdf_data-codocument
+                                                                      size  = GROUP SIZE
+                                                                   index = GROUP INDEX )
+                                                        ASCENDING
+                                                        REFERENCE INTO DATA(co_group).
+          TRY.
+              CREATE OBJECT lo_pdf_merger.
+
+            CATCH cx_rspo_pdf_merge .
+              MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+              APPEND VALUE #( type = 'E'
+                                   message = TEXT-007   " Document creation failed !
+                          )
+                    TO et_return.
+              EXIT.
+          ENDTRY.
+
+          LOOP AT GROUP co_group ASSIGNING FIELD-SYMBOL(<fl_codocument>).
+
+            IF co_group->size > 1.
+              DATA(lv_merge_doc) = <fl_codocument>-codocument.
+              DATA(lv_merge_carr) = <fl_codocument>-carrier.
+              DATA(lv_doc_type) = <fl_codocument>-pdf_doc_type.
+
+              MOVE <fl_codocument>-tbpdf-pdf TO lw_document.
+              lo_pdf_merger->check_document( EXPORTING document    = lw_document
+                                             IMPORTING error_text  = lv_error_text
+                                                       rc          = lv_rc ).
+              IF lv_rc = 0.
+                lo_pdf_merger->add_document( lw_document ).
+              ENDIF.
+            ELSEIF co_group->size = 1.
+              lv_merge_doc = <fl_codocument>-codocument.
+              lv_merge_carr = <fl_codocument>-carrier.
+              CLEAR: lv_datasize,lv_subject,lv_pdf_size_wbs, lv_pdf_content_wbs.
+              lv_pdf_size_wbs = xstrlen( <fl_codocument>-tbpdf-pdf ).
+              lv_pdf_content_wbs = cl_document_bcs=>xstring_to_solix(
+                                                  ip_xstring = <fl_codocument>-tbpdf-pdf ).
+*             limitation size of PDF file
+              lv_datasize = lv_datasize + lv_pdf_size_wbs.
+              IF lv_datasize > 20971520.
+                MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                APPEND VALUE #( type = 'E'
+                                     message = TEXT-007   " Document creation failed !
+                            )
+                      TO et_return.
+                EXIT.
+              ENDIF.
+              IF lv_pdf_content_wbs IS NOT INITIAL.
+                lv_subject = 'CO' && '_' && lv_merge_doc .
+                TRY.
+                    lo_document->add_attachment(
+                          i_attachment_type    = 'PDF'
+                          i_att_content_hex    = lv_pdf_content_wbs
+                          i_attachment_size    = lv_datasize
+                          i_attachment_subject = lv_subject ).
+
+                  CATCH cx_document_bcs.
+                    MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                    APPEND VALUE #( type = 'E'
+                                         message = TEXT-007   " Document creation failed !
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+
+          ENDLOOP.
+        ENDLOOP.
+        IF lo_pdf_merger IS BOUND.
+          lo_pdf_merger->get_document(
+            EXPORTING index  = 1
+              IMPORTING document = DATA(lv_strream) ).
+        ENDIF.
+        IF lv_strream IS NOT INITIAL.
+          TRY.
+              lo_pdf_merger->merge_documents( IMPORTING merged_document = lv_merged_document rc = lv_rc ).
+            CATCH  cx_rspo_pdf_merge.
+              lv_rc = 1.
+              MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+              APPEND VALUE #( type = 'E'
+                           message = TEXT-007   " Document creation failed !
+                          )
+                    TO et_return.
+              EXIT.
+          ENDTRY.
+
+          IF lv_rc = 0.
+
+            ls_formoutput-pdf = lv_merged_document.
+            lv_pdf_size_lfg = xstrlen( ls_formoutput-pdf ).
+            IF lv_pdf_size_lfg > 20971520.
+              MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+              APPEND VALUE #( type = 'E'
+                           message = TEXT-007   " Document creation failed !
+                          )
+                    TO et_return.
+              EXIT.
+            ENDIF.
+            lv_pdf_content_lfg = cl_document_bcs=>xstring_to_solix(
+                ip_xstring  = ls_formoutput-pdf ).
+            IF lv_pdf_content_lfg IS NOT INITIAL.
+              lv_subject = 'CO' && '_' && lv_merge_doc .
+              TRY.
+                  lo_document->add_attachment(
+                        i_attachment_type    = 'PDF'
+                        i_att_content_hex    = lv_pdf_content_lfg
+                        i_attachment_size    = lv_pdf_size_lfg
+                        i_attachment_subject = lv_subject ).
+
+                CATCH cx_document_bcs.
+                  MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                                       message = TEXT-007   " Document creation failed !
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+
+        TRY.
+*          Subject
+            lv_subject2 = lv_title_translated .
+            lo_send_request = cl_bcs=>create_persistent( ).
+            lo_send_request->set_message_subject( ip_subject = lv_subject2 ).
+*              Email address....
+            TRY.
+
+                LOOP AT it_recipients INTO DATA(ls_recipient).
+                  MOVE ls_recipient-line TO lv_email .
+                  lo_recipient = cl_cam_address_bcs=>create_internet_address(
+                     i_address_string = lv_email ).
+                  lo_send_request->add_recipient( i_recipient = lo_recipient i_blind_copy = 'X' ).
+                ENDLOOP.
+              CATCH cx_address_bcs.
+
+            ENDTRY.
+
+            lo_send_request->set_document( lo_document ).
+            IF lv_pdf_content_lfg IS NOT INITIAL OR lt_xml IS NOT INITIAL.
+              lv_sent_to_all = lo_send_request->send( i_with_error_screen = 'X' ).
+            ELSE.
+              lv_sent_to_all = abap_false.
+            ENDIF.
+
+            IF lv_sent_to_all EQ abap_true.
+              MESSAGE TEXT-009 TYPE 'S'.
+              APPEND VALUE #( type = 'S'
+                     message = TEXT-009         " Document attached to email successfully !
+            )
+              TO et_return.
+
+            ENDIF.
+
+            FREE :lo_send_request, lo_pdf_merger, lo_document, lv_strream.
+            CLEAR: lv_pdf_content_lfg,lv_pdf_content_wbs,ls_do_exist, lt_xml.
+            DELETE lt_data2mail WHERE codocument = ls_tmp1-codocument.
+            lv_co = VALUE #( lt_data2mail[ 1 ]-codocument OPTIONAL ).
+            CONTINUE.
+
+          CATCH cx_send_req_bcs.
+            MESSAGE TEXT-010 TYPE 'E'.            "Send mail failed !
+            APPEND VALUE #( type = 'E'
+                         message = TEXT-010    "Send mail failed !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~merge_pdf_per_fo.
+    DATA: lv_pdf_size_wbs TYPE so_obj_len,
+          lv_datasize     TYPE so_obj_len,
+          lv_pdf_size_lfg TYPE so_obj_len,
+          lv_subject      TYPE so_obj_des,
+          lv_subject2     TYPE string,
+          lt_text         TYPE soli_tab,
+          lt_text_html    TYPE string,
+          lo_recipient    TYPE REF TO if_recipient_bcs,
+          lv_sent_to_all  TYPE os_boolean,
+          lo_send_request TYPE REF TO cl_bcs.
+
+    DATA:
+      lv_error_text      TYPE string,
+      lv_rc              TYPE i,
+      lv_merged_document TYPE xstring,
+      lo_document        TYPE REF TO cl_document_bcs,
+      lo_pdf_merger      TYPE REF TO cl_rspo_pdf_merge,
+      lv_pdf_doc_type    TYPE /rb1m/sd_pdf_doc_type,
+      ls_formoutput      TYPE fpformoutput,
+      lv_pdf_content_wbs TYPE solix_tab,
+      lv_pdf_content_lfg TYPE solix_tab,
+      lv_email           TYPE adr6-smtp_addr.
+    DATA: lw_document  TYPE xstring,
+          lt_data2mail TYPE /rb1m/sd_t_pdf_data2mail.
+    DATA: lt_freightorder TYPE /rb1m/cl_sd_printout_d_mpc_ext=>tt_freightorder.
+    DATA: lo_writer TYPE REF TO /rb4c/if_ca_a2xl_writer.
+    DATA: lt_attachment_header    TYPE soli_tab,
+          ls_attachment_header    LIKE LINE OF lt_attachment_header,
+          lv_attachment_subject   TYPE sood-objdes,
+          lv_bytecount            TYPE sood-objlen,
+          lv_title_translated(20) TYPE c.
+    DATA:lv_xml_data TYPE xstring,
+         lt_xml      TYPE solix_tab.
+    CONSTANTS:
+      lc_beginhtmltag TYPE char30 VALUE ' <html> <body> ',
+      lc_endhtmltag   TYPE char30 VALUE ' </body> </html> '.
+*   Check if the language from Front End of PDF2Mail App is different than sy-langu
+*   Background processing is setting always to system language.....
+    IF is_deepdata_data2mail-email_language NE sy-langu.
+      SET LANGUAGE is_deepdata_data2mail-email_language.
+      lv_title_translated = TEXT-002.
+      SET LANGUAGE sy-langu.
+    ELSE.
+      lv_title_translated = TEXT-002.
+
+    ENDIF.
+
+    IF it_body_text IS NOT INITIAL.
+      lt_text = it_body_text.
+    ELSE.
+      lt_text_html = iv_body_html.
+      lt_text_html = lc_beginhtmltag && lt_text_html.
+    ENDIF.
+
+    IF iv_export_excel EQ abap_true .
+      lt_freightorder = CORRESPONDING #( it_pdf_data MAPPING codocument = codocument
+                                                            freightorderdocument = freightorderdocument
+                                                            deliverydocument = vbeln
+                                                            freightorderunit = fudocument
+                                                            carrier = carrier ).
+      DELETE lt_freightorder WHERE deliverydocument+0(2) = '00'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = '7'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = 'A'.
+      SORT lt_freightorder.
+      DELETE ADJACENT DUPLICATES FROM lt_freightorder.
+    ENDIF.
+
+*           Help Variable...
+    DATA(lv_fo) = VALUE #( it_pdf_data[ 1 ]-freightorderdocument OPTIONAL ).
+    lt_data2mail = CORRESPONDING #( it_pdf_data ).
+    LOOP AT it_pdf_data INTO DATA(ls_tmp1).
+      CLEAR: lt_text_html.
+      CHECK lt_data2mail IS NOT INITIAL.
+      TRY.
+          CREATE OBJECT lo_pdf_merger.
+          CREATE OBJECT lo_document.
+
+        CATCH cx_rspo_pdf_merge cx_document_bcs.
+          MESSAGE TEXT-010 TYPE 'E'.
+          APPEND VALUE #( type = 'E'
+                               message = TEXT-010     " Send mail failed !
+                      )
+                TO et_return.
+          EXIT.
+      ENDTRY.
+      IF ls_tmp1-freightorderdocument EQ lv_fo.
+*          Subject
+        lv_subject = lv_title_translated  && | | &&  ls_tmp1-freightorderdocument .
+        TRY.
+            CREATE OBJECT lo_document.
+            CREATE OBJECT lo_pdf_merger.
+
+          CATCH cx_rspo_pdf_merge cx_document_bcs.
+            MESSAGE TEXT-010 TYPE 'E'.  " Send mail failed !
+            APPEND VALUE #( type = 'E'
+                                 message = TEXT-010   " Send mail failed !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+        lt_text_html = iv_body_html.
+        lt_text_html = lc_beginhtmltag && lt_text_html.
+        DATA(lv_string) = TEXT-004 && | | && is_shippingpoint_adrs-name1 && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-name2 && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-stras && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-pstlz && | | && is_shippingpoint_adrs-ort01 && | | && TEXT-005.
+        lt_text_html = lt_text_html && lv_string.
+        lt_text_html = lt_text_html && lc_endhtmltag.
+        lt_text = cl_bcs_convert=>string_to_soli( lt_text_html ).
+        TRY.
+            IF it_body_text IS NOT INITIAL.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'RAW'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ELSE.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'HTM'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ENDIF.
+          CATCH cx_document_bcs.
+            MESSAGE TEXT-006 TYPE 'E'.          "  Document is failed to generate !
+            APPEND VALUE #( type = 'E'
+                         message = TEXT-006   "Document is failed to generate !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+*           Export Excel
+        IF iv_export_excel EQ abap_true .
+          CLEAR : lt_xml,lt_attachment_header, lv_subject, lv_xml_data ,
+                  lv_bytecount, lv_attachment_subject, ls_attachment_header.
+
+          DATA(lt_fo_excel) = lt_freightorder.
+          DELETE lt_fo_excel WHERE freightorderdocument NE ls_tmp1-freightorderdocument.
+          DATA(ls_do_exist) = VALUE #( lt_fo_excel[ deliverydocument = ls_tmp1-vbeln ]-deliverydocument OPTIONAL ).
+          IF lt_fo_excel IS NOT INITIAL.
+
+            CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_excel_data
+              EXPORTING
+                it_freightorder       = lt_fo_excel
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                eo_excel              = DATA(lo_excel).
+
+            DELETE ADJACENT DUPLICATES FROM lt_fo_excel COMPARING freightorderdocument.
+            DATA(lv_line) = lines( lt_fo_excel ).
+            CREATE OBJECT lo_writer TYPE /rb4c/cl_ca_a2xl_writer_2007.
+            IF lo_excel IS BOUND.
+              TRY.
+                  lv_xml_data = lo_writer->write_file( lo_excel ).
+
+                CATCH /rb4c/cx_ca_a2xl.
+                  MESSAGE TEXT-006 TYPE 'E'.          "  Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                               message = TEXT-006   "Document is failed to generate !
+                              )
+                        TO et_return.
+              ENDTRY.
+              lv_bytecount = xstrlen( lv_xml_data ).
+              IF lv_xml_data IS NOT INITIAL.
+                TRY.
+                    lt_xml = COND #( WHEN lv_xml_data IS NOT INITIAL
+                                               THEN  cl_bcs_convert=>xstring_to_solix( iv_xstring  = lv_xml_data  ) ).
+                  CATCH cx_bcs.
+                    MESSAGE TEXT-006 TYPE 'E'.          "  Document is failed to generate !
+                    APPEND VALUE #( type = 'E'
+                                 message = TEXT-006   "Document is failed to generate !
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+            IF lt_xml IS NOT INITIAL.
+              lv_subject = COND #( WHEN lv_line > 1 THEN lv_title_translated
+                                   ELSE 'FO_' && ls_tmp1-freightorderdocument ).
+
+              TRY.
+                  lv_attachment_subject  = lv_subject && '.xlsx'.
+                  CONCATENATE '&SO_FILENAME=' lv_attachment_subject INTO ls_attachment_header.
+                  APPEND ls_attachment_header TO lt_attachment_header.
+                  lo_document->add_attachment(
+                                          i_attachment_type    = 'XLS'
+                                          i_att_content_hex    = lt_xml
+                                          i_attachment_size    = lv_bytecount
+                                          i_attachment_header  = lt_attachment_header
+                                          i_attachment_subject = lv_subject ).
+                CATCH cx_document_bcs.
+                  MESSAGE TEXT-006 TYPE 'E'.          "  Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                               message = TEXT-006   "Document is failed to generate !
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ELSE.
+            APPEND VALUE #( type = 'W'
+                       message = TEXT-008 && | | && ls_tmp1-freightorderdocument ) TO et_return.
+            " No data attached to Delivery Note Application V2 for CO number
+          ENDIF.
+
+        ENDIF.
+*           Export Excel
+        LOOP AT lt_data2mail  INTO DATA(ls_pdf_data) WHERE freightorderdocument = ls_tmp1-freightorderdocument
+                                                       AND tbpdf-pdf IS NOT INITIAL
+                                                          GROUP BY  ( freightorderdocument = ls_pdf_data-freightorderdocument
+                                                                      size  = GROUP SIZE
+                                                                   index = GROUP INDEX )
+                                                        ASCENDING
+                                                        REFERENCE INTO DATA(fo_group).
+          TRY.
+              CREATE OBJECT lo_pdf_merger.
+
+            CATCH cx_rspo_pdf_merge .
+              MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+              APPEND VALUE #( type = 'E'
+                                   message = TEXT-007   " Document creation failed !
+                          )
+                    TO et_return.
+              EXIT.
+          ENDTRY.
+          LOOP AT GROUP fo_group ASSIGNING FIELD-SYMBOL(<fl_freightorderdocument>).
+
+            IF fo_group->size > 1.
+
+              DATA(lv_merge_doc) = <fl_freightorderdocument>-freightorderdocument.
+              DATA(lv_merge_carr) = <fl_freightorderdocument>-carrier.
+              DATA(lv_doc_type) = <fl_freightorderdocument>-pdf_doc_type.
+              MOVE <fl_freightorderdocument>-tbpdf-pdf TO lw_document.
+              lo_pdf_merger->check_document( EXPORTING document    = lw_document
+                                             IMPORTING error_text  = lv_error_text
+                                                       rc          = lv_rc ).
+              IF lv_rc = 0.
+                lo_pdf_merger->add_document( lw_document ).
+              ENDIF.
+            ELSEIF fo_group->size = 1.
+              lv_merge_doc = <fl_freightorderdocument>-freightorderdocument.
+              lv_merge_carr = <fl_freightorderdocument>-carrier.
+              CLEAR: lv_datasize,lv_subject,lv_pdf_size_wbs, lv_pdf_content_wbs.
+              lv_pdf_size_wbs = xstrlen( <fl_freightorderdocument>-tbpdf-pdf ).
+              lv_pdf_content_wbs = cl_document_bcs=>xstring_to_solix(
+                                                  ip_xstring = <fl_freightorderdocument>-tbpdf-pdf ).
+*             limitation size of PDF file
+              lv_datasize = lv_datasize + lv_pdf_size_wbs.
+              IF lv_datasize > 20971520.
+                MESSAGE TEXT-011 TYPE 'E'.          "File attach over size
+                APPEND VALUE #( type = 'E'
+                                message = TEXT-011  "File attach over size
+                                   )
+                             TO et_return.
+                EXIT.
+              ENDIF.
+              IF lv_pdf_content_wbs IS NOT INITIAL.
+                lv_subject = 'FO' && '_' && lv_merge_doc .
+                TRY.
+                    lo_document->add_attachment(
+                          i_attachment_type    = 'PDF'
+                          i_att_content_hex    = lv_pdf_content_wbs
+                          i_attachment_size    = lv_datasize
+                          i_attachment_subject = lv_subject ).
+
+                  CATCH cx_document_bcs.
+                    MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                    APPEND VALUE #( type = 'E'
+                                         message = TEXT-007   " Document creation failed !
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+
+          ENDLOOP.
+        ENDLOOP.
+        IF lo_pdf_merger IS BOUND.
+          lo_pdf_merger->get_document(
+            EXPORTING index  = 1
+              IMPORTING document = DATA(lv_strream) ).
+        ENDIF.
+        IF lv_strream IS NOT INITIAL.
+          TRY.
+              lo_pdf_merger->merge_documents( IMPORTING merged_document = lv_merged_document rc = lv_rc ).
+            CATCH  cx_rspo_pdf_merge.
+              lv_rc = 1.
+              MESSAGE TEXT-012 TYPE 'E'.                "Bosch shipment
+              APPEND VALUE #( type = 'E'
+                                   message = TEXT-012   "Merge PDF failed !
+                          )
+                    TO et_return.
+              EXIT.
+          ENDTRY.
+
+          IF lv_rc = 0.
+
+            ls_formoutput-pdf = lv_merged_document.
+            lv_pdf_size_lfg = xstrlen( ls_formoutput-pdf ).
+            IF lv_pdf_size_lfg > 20971520.
+              MESSAGE TEXT-013 TYPE 'E'.              " File attach over size!
+              APPEND VALUE #( type = 'E'
+                              message =  TEXT-013     " File attach over size!
+                     )
+               TO et_return.
+              EXIT.
+            ENDIF.
+            lv_pdf_content_lfg = cl_document_bcs=>xstring_to_solix(
+                ip_xstring  = ls_formoutput-pdf ).
+            IF lv_pdf_content_lfg IS NOT INITIAL.
+              lv_subject = 'FO' && '_' && lv_merge_doc .
+              TRY.
+                  lo_document->add_attachment(
+                        i_attachment_type    = 'PDF'
+                        i_att_content_hex    = lv_pdf_content_lfg
+                        i_attachment_size    = lv_pdf_size_lfg
+                        i_attachment_subject = lv_subject ).
+
+                CATCH cx_document_bcs.
+                  MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                                       message = TEXT-007   " Document creation failed !
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+
+
+        TRY.
+*          Subject
+            lv_subject2 = lv_title_translated.
+            lo_send_request = cl_bcs=>create_persistent( ).
+            lo_send_request->set_message_subject( ip_subject = lv_subject2 ).
+*              Email address....
+            TRY.
+
+                LOOP AT it_recipients INTO DATA(ls_recipient).
+                  MOVE ls_recipient-line TO lv_email .
+                  lo_recipient = cl_cam_address_bcs=>create_internet_address(
+                     i_address_string = lv_email ).
+                  lo_send_request->add_recipient( i_recipient = lo_recipient i_blind_copy = 'X' ).
+                ENDLOOP.
+              CATCH cx_address_bcs.
+
+            ENDTRY.
+
+            lo_send_request->set_document( lo_document ).
+
+            IF lv_pdf_content_lfg IS NOT INITIAL OR lt_xml IS NOT INITIAL.
+              lv_sent_to_all = lo_send_request->send( i_with_error_screen = 'X' ).
+            ELSE.
+              lv_sent_to_all = abap_false.
+            ENDIF.
+
+            IF lv_sent_to_all EQ abap_true.
+              MESSAGE TEXT-009 TYPE 'S'.
+              APPEND VALUE #( type = 'S'
+                     message = TEXT-009
+            )
+              TO et_return.
+
+            ENDIF.
+
+            FREE :lo_send_request, lo_pdf_merger, lo_document,lv_strream.
+            CLEAR: lv_pdf_content_wbs , lv_pdf_content_lfg ,ls_do_exist, lt_xml.
+            DELETE lt_data2mail WHERE freightorderdocument = ls_tmp1-freightorderdocument.
+            lv_fo = VALUE #( lt_data2mail[ 1 ]-freightorderdocument OPTIONAL ).
+            CONTINUE.
+
+          CATCH cx_send_req_bcs.
+            MESSAGE TEXT-010 TYPE 'E'.            "Send mail failed !
+            APPEND VALUE #( type = 'E'
+                         message = TEXT-010    "Send mail failed !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~merge_per_carrier_co.
+    DATA: lv_pdf_size_wbs TYPE so_obj_len,
+          lv_datasize     TYPE so_obj_len,
+          lv_pdf_size_lfg TYPE so_obj_len,
+          lv_subject      TYPE so_obj_des,
+          lv_subject2     TYPE string,
+          lt_text         TYPE soli_tab,
+          lt_text_html    TYPE string,
+          lo_recipient    TYPE REF TO if_recipient_bcs,
+          lv_sent_to_all  TYPE os_boolean,
+          lo_send_request TYPE REF TO cl_bcs
+          .
+
+    DATA:
+      lv_error_text      TYPE string,
+      lv_rc              TYPE i,
+      lv_merged_document TYPE xstring,
+      lo_document        TYPE REF TO cl_document_bcs,
+      lo_pdf_merger      TYPE REF TO cl_rspo_pdf_merge,
+      ls_formoutput      TYPE fpformoutput,
+      lv_pdf_content_wbs TYPE solix_tab,
+      lv_pdf_content_lfg TYPE solix_tab,
+      lv_email           TYPE adr6-smtp_addr
+      .
+    DATA: lw_document  TYPE xstring,
+          lt_data2mail TYPE /rb1m/sd_t_pdf_data2mail.
+    DATA: lt_co  TYPE STANDARD TABLE OF vbeln.
+    DATA: lt_freightorder TYPE /rb1m/cl_sd_printout_d_mpc_ext=>tt_freightorder.
+    DATA: lo_writer TYPE REF TO /rb4c/if_ca_a2xl_writer.
+    DATA: lt_attachment_header    TYPE soli_tab,
+          ls_attachment_header    LIKE LINE OF lt_attachment_header,
+          lv_attachment_subject   TYPE sood-objdes,
+          lv_bytecount            TYPE sood-objlen,
+          lv_title_translated(20) TYPE c.
+    DATA:lv_xml_data TYPE xstring,
+         lt_xml      TYPE solix_tab.
+
+    FIELD-SYMBOLS: <lfs_line> TYPE soli.
+
+    CONSTANTS:
+      lc_beginhtmltag TYPE char30 VALUE ' <html> <body> ',
+      lc_endhtmltag   TYPE char30 VALUE ' </body> </html> '.
+
+    IF it_body_text IS NOT INITIAL.
+      lt_text = it_body_text.
+    ELSE.
+      lt_text_html = iv_body_html.
+      lt_text_html = lc_beginhtmltag && lt_text_html.
+    ENDIF.
+*   Check if the language from Front End of PDF2Mail App is different than sy-langu
+*   Background processing is setting always to system language.....
+    IF is_deepdata_data2mail-email_language NE sy-langu.
+      SET LANGUAGE is_deepdata_data2mail-email_language.
+      lv_title_translated = TEXT-002.
+      SET LANGUAGE sy-langu.
+    ELSE.
+      lv_title_translated = TEXT-002.
+
+    ENDIF.
+
+    lt_freightorder = CORRESPONDING #( it_pdf_data MAPPING codocument = codocument
+                                                          freightorderdocument = freightorderdocument
+                                                          deliverydocument = vbeln
+                                                          freightorderunit = fudocument
+                                                          carrier = carrier ).
+    DATA(lt_subject) = lt_freightorder.
+    SORT lt_subject ASCENDING BY codocument.
+    DELETE ADJACENT DUPLICATES FROM lt_subject COMPARING codocument.
+    IF iv_export_excel IS NOT INITIAL .
+
+      DELETE lt_freightorder WHERE deliverydocument+0(2) = '00'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = '7'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = 'A'.
+      SORT lt_freightorder.
+      DELETE ADJACENT DUPLICATES FROM lt_freightorder.
+    ENDIF.
+*           Help Variable...
+    lt_data2mail = CORRESPONDING #( it_pdf_data ).
+    DATA(lv_car) = VALUE #( it_pdf_data[ 1 ]-carrier OPTIONAL ).
+    LOOP AT it_pdf_data INTO DATA(ls_tmp1).
+      CLEAR: lt_text_html.
+
+      CHECK lt_data2mail IS NOT INITIAL.
+      IF ls_tmp1-carrier EQ lv_car.
+        CLEAR :lt_co, lt_text_html.
+        TRY.
+            CREATE OBJECT lo_document.
+            CREATE OBJECT lo_pdf_merger.
+
+          CATCH cx_rspo_pdf_merge cx_document_bcs.
+            MESSAGE 'Send mail failed !' TYPE 'E'.
+            APPEND VALUE #( type = 'E'
+                                 message = 'Send mail failed !'
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+*          Subject
+        DATA(lt_subject_temp) = lt_subject.
+        DATA(lt_excel) = lt_freightorder.
+        DELETE lt_subject_temp  WHERE carrier NE ls_tmp1-carrier.
+        DELETE lt_excel  WHERE carrier NE ls_tmp1-carrier.
+        lt_co = VALUE #( BASE lt_co FOR ls_sub IN lt_subject_temp ( ls_sub-codocument )  ).
+
+        lv_subject = lv_title_translated  && | | &&  ls_tmp1-codocument && | | &&  '/' && | | && ls_tmp1-carriername  .
+
+        lt_text_html = lc_beginhtmltag && lt_text_html.
+
+        DATA(lv_string) = '<p>The list of CO number belong to' && | | && ls_tmp1-carriername && | | && ':</p> '.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        LOOP AT lt_co INTO DATA(ls_co).
+          lv_string = lv_string && '<p>' && '+ CO_' && ls_co && '.' && '</p> '.
+
+        ENDLOOP.
+        lt_text_html = lt_text_html && lv_string.
+
+        lt_text_html = lt_text_html && iv_body_html.
+
+        CLEAR lv_string.
+        lv_string = '<p>' && | | && is_shippingpoint_adrs-name1 && | | && '<br> '.
+        lt_text_html = lt_text_html && lv_string.
+
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-name2 && | | && '<br> '.
+        lt_text_html = lt_text_html && lv_string.
+
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-stras && | | && '<br> '.
+        lt_text_html = lt_text_html && lv_string.
+
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-pstlz && | | && is_shippingpoint_adrs-ort01 && | | && '</p> '.
+        lt_text_html = lt_text_html && lv_string.
+        lt_text_html = lt_text_html && lc_endhtmltag.
+        lt_text = cl_bcs_convert=>string_to_soli( lt_text_html ).
+        TRY.
+            IF it_body_text IS NOT INITIAL.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'RAW'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ELSE.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'HTM'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ENDIF.
+
+          CATCH cx_document_bcs.
+            MESSAGE 'Document is failed to generate !' TYPE 'E'.
+            APPEND VALUE #( type = 'E'
+                                 message = 'Document is failed to generate !'
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+        CLEAR lt_subject_temp.
+*     START Export Excel
+        IF iv_export_excel EQ abap_true .
+          CLEAR : lt_xml,lt_attachment_header, lv_subject, lv_xml_data ,
+                  lv_bytecount, lv_attachment_subject, ls_attachment_header.
+
+          IF lt_excel IS NOT INITIAL.
+            CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_excel_data
+              EXPORTING
+                it_freightorder       = lt_excel
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                eo_excel              = DATA(lo_excel).
+
+            DELETE ADJACENT DUPLICATES FROM lt_excel COMPARING codocument.
+            DATA(lv_line) = lines( lt_excel ).
+            CREATE OBJECT lo_writer TYPE /rb4c/cl_ca_a2xl_writer_2007.
+            IF lo_excel IS BOUND.
+              TRY.
+                  lv_xml_data = lo_writer->write_file( lo_excel ).
+
+                CATCH /rb4c/cx_ca_a2xl.
+                  MESSAGE 'Document attached fail !' TYPE 'E'.
+                  APPEND VALUE #( type = 'E'
+                                       message = 'Document attached fail !'
+                              )
+                        TO et_return.
+              ENDTRY.
+              lv_bytecount = xstrlen( lv_xml_data ).
+              IF lv_xml_data IS NOT INITIAL.
+                TRY.
+                    lt_xml = COND #( WHEN lv_xml_data IS NOT INITIAL
+                                               THEN  cl_bcs_convert=>xstring_to_solix( iv_xstring  = lv_xml_data  ) ).
+                  CATCH cx_bcs.
+                    MESSAGE 'Document attached fail !' TYPE 'E'.
+                    APPEND VALUE #( type = 'E'
+                                         message = 'Document attached fail !'
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+
+            IF lt_xml IS NOT INITIAL.
+              lv_subject = COND #( WHEN lv_line > 1 THEN lv_title_translated
+                                   ELSE 'CO_' && ls_tmp1-codocument ).
+
+              TRY.
+                  lv_attachment_subject  = lv_subject && '.xlsx'.
+                  CONCATENATE '&SO_FILENAME=' lv_attachment_subject INTO ls_attachment_header.
+                  APPEND ls_attachment_header TO lt_attachment_header.
+                  lo_document->add_attachment(
+                                          i_attachment_type    = 'XLS'
+                                          i_att_content_hex    = lt_xml
+                                          i_attachment_size    = lv_bytecount
+                                          i_attachment_header  = lt_attachment_header
+                                          i_attachment_subject = lv_subject ).
+                CATCH cx_document_bcs.
+                  MESSAGE 'Document attached fail !' TYPE 'E'.
+                  APPEND VALUE #( type = 'E'
+                                       message = 'Document attached fail !'
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ELSE.
+
+            APPEND VALUE #( type = 'W'
+                       message = 'No data attached to Delivery Note Application V2 for Carrier ' && | | && ls_tmp1-carriername ) TO et_return.
+          ENDIF.
+        ENDIF.
+*      END Export Excel
+        LOOP AT lt_data2mail  INTO DATA(ls_pdf_data) WHERE carrier = ls_tmp1-carrier
+                                                       AND tbpdf-pdf IS NOT INITIAL
+                                                          GROUP BY  ( fodocument = ls_pdf_data-codocument
+                                                                      size  = GROUP SIZE
+                                                                   index = GROUP INDEX )
+                                                        ASCENDING
+                                                        REFERENCE INTO DATA(co_group).
+          TRY.
+              CREATE OBJECT lo_pdf_merger.
+
+            CATCH cx_rspo_pdf_merge .
+              MESSAGE 'Send mail failed !' TYPE 'E'.
+              APPEND VALUE #( type = 'E'
+                                   message = 'Send mail failed !'
+                          )
+                    TO et_return.
+              EXIT.
+          ENDTRY.
+          LOOP AT GROUP co_group ASSIGNING FIELD-SYMBOL(<fl_codocument>).
+            IF co_group->size > 1.
+              DATA(lv_merge_doc) = <fl_codocument>-codocument.
+*              lv_merge_carr = <fl_codocument>-carrier.
+              MOVE <fl_codocument>-tbpdf-pdf TO lw_document.
+              lo_pdf_merger->check_document( EXPORTING document    = lw_document
+                                             IMPORTING error_text  = lv_error_text
+                                                       rc          = lv_rc ).
+              IF lv_rc = 0.
+                lo_pdf_merger->add_document( lw_document ).
+              ENDIF.
+            ELSEIF co_group->size = 1.
+              lv_merge_doc = <fl_codocument>-codocument.
+              CLEAR: lv_datasize,lv_subject,lv_pdf_size_wbs, lv_pdf_content_wbs.
+              CHECK <fl_codocument>-tbpdf-pdf IS NOT INITIAL.
+              lv_pdf_size_wbs = xstrlen( <fl_codocument>-tbpdf-pdf ).
+              lv_pdf_content_wbs = cl_document_bcs=>xstring_to_solix(
+                                                  ip_xstring = <fl_codocument>-tbpdf-pdf ).
+*             limitation size of PDF file
+              lv_datasize = lv_datasize + lv_pdf_size_wbs.
+              IF lv_datasize > 20971520.
+                MESSAGE 'File attach over size!' TYPE 'E'.
+                APPEND VALUE #( type = 'E'
+                                message = 'File attach over size!'
+                                   )
+                             TO et_return.
+                EXIT.
+              ENDIF.
+              IF lv_pdf_content_wbs IS NOT INITIAL.
+                lv_subject = 'CO_' && || && lv_merge_doc .
+                TRY.
+                    lo_document->add_attachment(
+                          i_attachment_type    = 'PDF'
+                          i_att_content_hex    = lv_pdf_content_wbs
+                          i_attachment_size    = lv_datasize
+                          i_attachment_subject = lv_subject ).
+
+                  CATCH cx_document_bcs.
+                    MESSAGE 'Document attached fail !' TYPE 'E'.
+                    APPEND VALUE #( type = 'E'
+                                         message = 'Document attached fail !'
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+          ENDLOOP.
+          IF lo_pdf_merger IS BOUND.
+            lo_pdf_merger->get_document(
+              EXPORTING index  = 1
+                IMPORTING document = DATA(lv_strream) ).
+          ENDIF.
+          IF lv_strream IS NOT INITIAL.
+
+            TRY.
+                lo_pdf_merger->merge_documents( IMPORTING merged_document = lv_merged_document rc = lv_rc ).
+              CATCH  cx_rspo_pdf_merge.
+                lv_rc = 1.
+                MESSAGE 'Merge PDF failed !' TYPE 'E'.
+                APPEND VALUE #( type = 'E'
+                                     message = 'Merge PDF failed !'
+                            )
+                      TO et_return.
+                EXIT.
+            ENDTRY.
+            IF lv_rc = 0.
+
+              ls_formoutput-pdf = lv_merged_document.
+              lv_pdf_size_lfg = xstrlen( ls_formoutput-pdf ).
+              IF lv_pdf_size_lfg > 20971520.
+                MESSAGE 'File attach over size!' TYPE 'E'.
+                APPEND VALUE #( type = 'E'
+                                message = 'File attach over size!'
+                       )
+                 TO et_return.
+                EXIT.
+              ENDIF.
+              lv_pdf_content_lfg = cl_document_bcs=>xstring_to_solix(
+                  ip_xstring  = ls_formoutput-pdf ).
+              IF lv_pdf_content_lfg IS NOT INITIAL.
+                lv_subject = 'CO_' && || && lv_merge_doc .
+                TRY.
+                    lo_document->add_attachment(
+                          i_attachment_type    = 'PDF'
+                          i_att_content_hex    = lv_pdf_content_lfg
+                          i_attachment_size    = lv_pdf_size_lfg
+                          i_attachment_subject = lv_subject ).
+                    FREE lo_pdf_merger.
+                    CLEAR lv_strream.
+                  CATCH cx_document_bcs.
+                    MESSAGE 'Document attached fail !' TYPE 'E'.
+                    APPEND VALUE #( type = 'E'
+                                         message = 'Document attached fail !'
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+        TRY.
+*          Subject
+            lv_subject2 = lv_title_translated
+            .
+            lo_send_request = cl_bcs=>create_persistent( ).
+            lo_send_request->set_message_subject( ip_subject = lv_subject2 ).
+*              Email address....
+            TRY.
+
+                LOOP AT it_recipients INTO DATA(ls_recipient).
+                  MOVE ls_recipient-line TO lv_email .
+                  lo_recipient = cl_cam_address_bcs=>create_internet_address(
+                     i_address_string = lv_email ).
+                  lo_send_request->add_recipient( i_recipient = lo_recipient i_blind_copy = 'X' ).
+                ENDLOOP.
+              CATCH cx_address_bcs.
+
+            ENDTRY.
+
+            lo_send_request->set_document( lo_document ).
+*            IF lv_pdf_content_wbs IS NOT INITIAL OR lv_pdf_content_lfg IS NOT INITIAL.
+            IF lv_pdf_content_lfg IS NOT INITIAL OR lt_xml IS NOT INITIAL.
+              lv_sent_to_all = lo_send_request->send( i_with_error_screen = 'X' ).
+            ELSE.
+              lv_sent_to_all = abap_false.
+            ENDIF.
+            IF lv_sent_to_all EQ abap_true.
+              DATA(lv_txt) = 'Document attached to email successfully !'
+              .
+              MESSAGE lv_txt TYPE 'S'.
+              APPEND VALUE #( type = 'S'
+                     message = lv_txt
+            )
+              TO et_return.
+
+            ENDIF.
+
+            FREE :lo_send_request, lo_pdf_merger, lo_document, lv_strream.
+            CLEAR: lv_pdf_content_wbs , lv_pdf_content_lfg, lt_xml.
+            DELETE lt_data2mail WHERE carrier = ls_tmp1-carrier.
+            lv_car = VALUE #( lt_data2mail[ 1 ]-carrier OPTIONAL ).
+            CONTINUE.
+
+          CATCH cx_send_req_bcs.
+            MESSAGE 'Send mail failed !' TYPE 'E'.
+            APPEND VALUE #( type = 'E'
+                                 message = 'Send mail failed !'
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~merge_per_carrier_fo.
+    DATA: lv_pdf_size_wbs TYPE so_obj_len,
+          lv_datasize     TYPE so_obj_len,
+          lv_pdf_size_lfg TYPE so_obj_len,
+          lv_subject      TYPE so_obj_des,
+          lv_subject2     TYPE string,
+          lt_text         TYPE soli_tab,
+          lt_text_html    TYPE string,
+          lo_recipient    TYPE REF TO if_recipient_bcs,
+          lv_sent_to_all  TYPE os_boolean,
+          lo_send_request TYPE REF TO cl_bcs.
+
+    DATA:
+      lv_error_text      TYPE string,
+      lv_rc              TYPE i,
+      lv_merged_document TYPE xstring,
+      lo_document        TYPE REF TO cl_document_bcs,
+      lo_pdf_merger      TYPE REF TO cl_rspo_pdf_merge,
+      ls_formoutput      TYPE fpformoutput,
+      lv_pdf_content_wbs TYPE solix_tab,
+      lv_pdf_content_lfg TYPE solix_tab,
+      lv_email           TYPE adr6-smtp_addr.
+    DATA: lw_document  TYPE xstring,
+          lt_data2mail TYPE /rb1m/sd_t_pdf_data2mail.
+    DATA: lt_fo  TYPE STANDARD TABLE OF vbeln.
+    DATA: lt_freightorder TYPE /rb1m/cl_sd_printout_d_mpc_ext=>tt_freightorder.
+    DATA: lo_writer TYPE REF TO /rb4c/if_ca_a2xl_writer.
+    DATA: lt_attachment_header  TYPE soli_tab,
+          ls_attachment_header  LIKE LINE OF lt_attachment_header,
+          lv_attachment_subject TYPE sood-objdes,
+          lv_bytecount          TYPE sood-objlen.
+    DATA:lv_xml_data             TYPE xstring,
+         lt_xml                  TYPE solix_tab,
+         lv_title_translated(20) TYPE c.
+    CONSTANTS:
+      lc_beginhtmltag TYPE char30 VALUE ' <html> <body> ',
+      lc_endhtmltag   TYPE char30 VALUE ' </body> </html> '.
+    FIELD-SYMBOLS: <lfs_line> TYPE soli.
+
+*   Check if the language from Front End of PDF2Mail App is different than sy-langu
+*   Background processing is setting always to system language.....
+    IF is_deepdata_data2mail-email_language NE sy-langu.
+      SET LANGUAGE is_deepdata_data2mail-email_language.
+      lv_title_translated = TEXT-002.
+      SET LANGUAGE sy-langu.
+    ELSE.
+      lv_title_translated = TEXT-002.
+
+    ENDIF.
+
+    IF it_body_text IS NOT INITIAL.
+      lt_text = it_body_text.
+    ELSE.
+      lt_text_html = iv_body_html.
+      lt_text_html = lc_beginhtmltag && lt_text_html.
+    ENDIF.
+
+    lt_freightorder = CORRESPONDING #( it_pdf_data MAPPING codocument = codocument
+                                                          freightorderdocument = freightorderdocument
+                                                          deliverydocument = vbeln
+                                                          freightorderunit = fudocument
+                                                          carrier = carrier
+                                                          carriername = carriername ).
+    DATA(lt_subject) = lt_freightorder.
+    SORT lt_subject ASCENDING BY freightorderdocument.
+    DELETE ADJACENT DUPLICATES FROM lt_subject COMPARING freightorderdocument.
+
+    IF iv_export_excel IS NOT INITIAL .
+
+      DELETE lt_freightorder WHERE deliverydocument+0(2) = '00'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = '7'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = 'A'.
+      SORT lt_freightorder.
+      DELETE ADJACENT DUPLICATES FROM lt_freightorder.
+    ENDIF.
+
+*           Help Variable...
+    lt_data2mail = CORRESPONDING #( it_pdf_data ).
+    DATA(lv_car) = VALUE #( it_pdf_data[ 1 ]-carrier OPTIONAL ).
+    LOOP AT it_pdf_data INTO DATA(ls_tmp1) .
+      CLEAR: lt_text_html.
+      CHECK lt_data2mail IS NOT INITIAL.
+      IF ls_tmp1-carrier EQ lv_car.
+        CLEAR :  lt_fo, lt_text_html.
+        TRY.
+            CREATE OBJECT lo_document.
+            CREATE OBJECT lo_pdf_merger.
+
+          CATCH cx_rspo_pdf_merge cx_document_bcs.
+            MESSAGE 'Send mail failed !' TYPE 'E'.
+            APPEND VALUE #( type = 'E'
+                                 message = 'Send mail failed !'
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+        DATA(lt_subject_temp) = lt_subject.
+        DATA(lt_excel) = lt_freightorder.
+        DELETE lt_subject_temp  WHERE carrier NE ls_tmp1-carrier.
+        DELETE lt_excel  WHERE carrier NE ls_tmp1-carrier.
+        DATA(ls_do_exist) = VALUE #( lt_excel[ deliverydocument = ls_tmp1-vbeln ]-deliverydocument OPTIONAL ).
+        lt_fo = VALUE #( BASE lt_fo FOR ls_sub IN lt_subject_temp ( ls_sub-freightorderdocument )  ).
+*          Subject
+        lv_subject = lv_title_translated  && | | &&  ls_tmp1-freightorderdocument && | | &&  '/' && | | && ls_tmp1-carriername  .
+        lt_text_html = lc_beginhtmltag && lt_text_html.
+        DATA(lv_string) = '<p>The list of FO number belong to' && | | && ls_tmp1-carriername && | | && ':</p> '.
+        lt_text_html = lc_beginhtmltag  && lv_string.
+
+        CLEAR lv_string.
+        LOOP AT lt_fo INTO DATA(ls_fo).
+          lv_string = lv_string && '<p>' && '+ FO_' && ls_fo && '.' && '</p> '.
+
+        ENDLOOP.
+        lt_text_html = lt_text_html && lv_string.
+
+        lt_text_html = lt_text_html && iv_body_html.
+        CLEAR lv_string.
+        lv_string = '<p>' && | | && is_shippingpoint_adrs-name1 && | | && '<br> '.
+        lt_text_html = lt_text_html && lv_string.
+
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-name2 && | | && '<br> '.
+        lt_text_html = lt_text_html && lv_string.
+
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-stras && | | && '<br> '.
+        lt_text_html = lt_text_html && lv_string.
+
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-pstlz && | | && is_shippingpoint_adrs-ort01 && | | && '</p> '.
+        lt_text_html = lt_text_html && lv_string.
+
+        lt_text_html = lt_text_html && lc_endhtmltag.
+        lt_text = cl_bcs_convert=>string_to_soli( lt_text_html ).
+
+        TRY.
+            IF it_body_text IS NOT INITIAL.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'RAW'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ELSE.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'HTM'
+                  i_text    = lt_text
+                  i_length  = lv_pdf_size_lfg
+                  i_subject = lv_subject ).
+            ENDIF.
+          CATCH cx_document_bcs.
+            MESSAGE 'Document is failed to generate !' TYPE 'E'.
+            APPEND VALUE #( type = 'E'
+                                 message = 'Document is failed to generate !'
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+        CLEAR lt_subject_temp.
+*      Start Export Excel
+        IF iv_export_excel EQ abap_true.
+          CLEAR : lt_xml,lt_attachment_header, lv_subject, lv_xml_data ,
+                  lv_bytecount, lv_attachment_subject, ls_attachment_header.
+
+          IF lt_excel IS NOT INITIAL.
+            CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_excel_data
+              EXPORTING
+                it_freightorder       = lt_excel
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                eo_excel              = DATA(lo_excel).
+
+            DELETE ADJACENT DUPLICATES FROM lt_excel COMPARING freightorderdocument.
+            DATA(lv_line) = lines( lt_excel ).
+            CREATE OBJECT lo_writer TYPE /rb4c/cl_ca_a2xl_writer_2007.
+            IF lo_excel IS BOUND.
+              TRY.
+                  lv_xml_data = lo_writer->write_file( lo_excel ).
+
+                CATCH /rb4c/cx_ca_a2xl.
+                  MESSAGE 'Document attached fail !' TYPE 'E'.
+                  APPEND VALUE #( type = 'E'
+                                       message = 'Document attached fail !'
+                              )
+                        TO et_return.
+              ENDTRY.
+              lv_bytecount = xstrlen( lv_xml_data ).
+              IF lv_xml_data IS NOT INITIAL.
+                TRY.
+                    lt_xml = COND #( WHEN lv_xml_data IS NOT INITIAL
+                                               THEN  cl_bcs_convert=>xstring_to_solix( iv_xstring  = lv_xml_data  ) ).
+                  CATCH cx_bcs.
+                    MESSAGE 'Document attached fail !' TYPE 'E'.
+                    APPEND VALUE #( type = 'E'
+                                         message = 'Document attached fail !'
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+
+            IF lt_xml IS NOT INITIAL.
+              lv_subject = COND #( WHEN lv_line > 1 THEN lv_title_translated
+                                   ELSE 'FO_' && ls_tmp1-freightorderdocument ).
+
+              TRY.
+                  lv_attachment_subject  = lv_subject && '.xlsx'.
+                  CONCATENATE '&SO_FILENAME=' lv_attachment_subject INTO ls_attachment_header.
+                  APPEND ls_attachment_header TO lt_attachment_header.
+                  lo_document->add_attachment(
+                                          i_attachment_type    = 'XLS'
+                                          i_att_content_hex    = lt_xml
+                                          i_attachment_size    = lv_bytecount
+                                          i_attachment_header  = lt_attachment_header
+                                          i_attachment_subject = lv_subject ).
+
+                CATCH cx_document_bcs.
+                  MESSAGE 'Document attached fail !' TYPE 'E'.
+                  APPEND VALUE #( type = 'E'
+                                       message = 'Document attached fail !'
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ELSE.
+            APPEND VALUE #( type = 'W'
+                       message = 'No data attached to Delivery Note Application V2 for Carrier ' && | | && ls_tmp1-carriername ) TO et_return.
+          ENDIF.
+        ENDIF.
+*   END Export Excel
+        LOOP AT lt_data2mail  INTO DATA(ls_pdf_data) WHERE carrier = ls_tmp1-carrier
+                                                       AND tbpdf-pdf IS NOT INITIAL
+                                                          GROUP BY  ( fodocument = ls_pdf_data-freightorderdocument
+                                                                      size  = GROUP SIZE
+                                                                   index = GROUP INDEX )
+                                                        ASCENDING
+                                                        REFERENCE INTO DATA(fo_group).
+          TRY.
+              CREATE OBJECT lo_pdf_merger.
+
+            CATCH cx_rspo_pdf_merge .
+              MESSAGE 'Send mail failed !' TYPE 'E'.
+              APPEND VALUE #( type = 'E'
+                                   message = 'Send mail failed !'
+                          )
+                    TO et_return.
+              EXIT.
+          ENDTRY.
+
+          LOOP AT GROUP fo_group ASSIGNING FIELD-SYMBOL(<fl_fodocument>).
+            IF fo_group->size > 1.
+
+              DATA(lv_merge_doc) = <fl_fodocument>-freightorderdocument.
+              CHECK <fl_fodocument>-tbpdf-pdf IS NOT INITIAL.
+              MOVE <fl_fodocument>-tbpdf-pdf TO lw_document.
+              lo_pdf_merger->check_document( EXPORTING document    = lw_document
+                                             IMPORTING error_text  = lv_error_text
+                                                       rc          = lv_rc ).
+              IF lv_rc = 0.
+                lo_pdf_merger->add_document( lw_document ).
+              ENDIF.
+            ELSEIF fo_group->size = 1.
+              lv_merge_doc = <fl_fodocument>-freightorderdocument.
+              CLEAR: lv_datasize,lv_subject,lv_pdf_size_wbs, lv_pdf_content_wbs.
+              lv_pdf_size_wbs = xstrlen( <fl_fodocument>-tbpdf-pdf ).
+              lv_pdf_content_wbs = cl_document_bcs=>xstring_to_solix(
+                                                  ip_xstring = <fl_fodocument>-tbpdf-pdf ).
+              lv_datasize = lv_datasize + lv_pdf_size_wbs.
+              IF lv_datasize > 20971520.
+                MESSAGE 'File attach over size!' TYPE 'E'.
+                APPEND VALUE #( type = 'E'
+                                message = 'File attach over size!'
+                                   )
+                             TO et_return.
+                EXIT.
+              ENDIF.
+              IF lv_pdf_content_wbs IS NOT INITIAL.
+                lv_subject = 'FO_' && || && lv_merge_doc .
+                TRY.
+                    lo_document->add_attachment(
+                          i_attachment_type    = 'PDF'
+                          i_att_content_hex    = lv_pdf_content_wbs
+                          i_attachment_size    = lv_datasize
+                          i_attachment_subject = lv_subject ).
+
+                  CATCH cx_document_bcs.
+                    MESSAGE 'Document attached fail !' TYPE 'E'.
+                    APPEND VALUE #( type = 'E'
+                                         message = 'Document attached fail !'
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+          ENDLOOP.
+          IF lo_pdf_merger IS BOUND.
+            lo_pdf_merger->get_document(
+              EXPORTING index  = 1
+                IMPORTING document = DATA(lv_strream) ).
+          ENDIF.
+          IF lv_strream IS NOT INITIAL.
+
+            TRY.
+                lo_pdf_merger->merge_documents( IMPORTING merged_document = lv_merged_document rc = lv_rc ).
+              CATCH  cx_rspo_pdf_merge.
+                lv_rc = 1.
+                MESSAGE 'Merge PDF failed !' TYPE 'E'.
+                APPEND VALUE #( type = 'E'
+                                     message = 'Merge PDF failed !'
+                            )
+                      TO et_return.
+                EXIT.
+            ENDTRY.
+            IF lv_rc = 0.
+
+              ls_formoutput-pdf = lv_merged_document.
+              lv_pdf_size_lfg = xstrlen( ls_formoutput-pdf ).
+              IF lv_pdf_size_lfg > 20971520.
+                MESSAGE 'File attach over size!' TYPE 'E'.
+                APPEND VALUE #( type = 'E'
+                                message = 'File attach over size!'
+                       )
+                 TO et_return.
+                EXIT.
+              ENDIF.
+              lv_pdf_content_lfg = cl_document_bcs=>xstring_to_solix(
+                  ip_xstring  = ls_formoutput-pdf ).
+              IF lv_pdf_content_lfg IS NOT INITIAL.
+                lv_subject = 'FO_' && || && lv_merge_doc .
+                TRY.
+                    lo_document->add_attachment(
+                          i_attachment_type    = 'PDF'
+                          i_att_content_hex    = lv_pdf_content_lfg
+                          i_attachment_size    = lv_pdf_size_lfg
+                          i_attachment_subject = lv_subject ).
+                    FREE lo_pdf_merger.
+                    CLEAR lv_strream.
+                  CATCH cx_document_bcs.
+                    MESSAGE 'Document attached fail !' TYPE 'E'.
+                    APPEND VALUE #( type = 'E'
+                                         message = 'Document attached fail !'
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+
+            ENDIF.
+          ENDIF.
+        ENDLOOP.
+
+        TRY.
+*          Subject
+            lv_subject2 = lv_title_translated .
+            lo_send_request = cl_bcs=>create_persistent( ).
+            lo_send_request->set_message_subject( ip_subject = lv_subject2 ).
+*              Email address....
+            TRY.
+
+                LOOP AT it_recipients INTO DATA(ls_recipient).
+                  MOVE ls_recipient-line TO lv_email .
+                  lo_recipient = cl_cam_address_bcs=>create_internet_address(
+                     i_address_string = lv_email ).
+                  lo_send_request->add_recipient( i_recipient = lo_recipient i_blind_copy = 'X' ).
+                ENDLOOP.
+              CATCH cx_address_bcs.
+
+            ENDTRY.
+
+            lo_send_request->set_document( lo_document ).
+*              IF lv_pdf_content_wbs IS NOT INITIAL OR lv_pdf_content_lfg IS NOT INITIAL.
+            IF lv_pdf_content_lfg IS NOT INITIAL OR lt_xml IS NOT INITIAL.
+
+              lv_sent_to_all = lo_send_request->send( i_with_error_screen = 'X' ).
+            ELSE.
+              lv_sent_to_all = abap_false.
+            ENDIF.
+            IF lv_sent_to_all EQ abap_true.
+              DATA(lv_txt) = 'Document attached to email successfully !'
+*              && || &&  lv_co_pre && | | && '/' && | | && lv_fo
+              .
+              MESSAGE lv_txt TYPE 'S'.
+              APPEND VALUE #( type = 'S'
+                     message = lv_txt
+            )
+              TO et_return.
+
+            ENDIF.
+
+            FREE :lo_send_request, lo_pdf_merger, lo_document,lv_strream.
+            CLEAR: lv_pdf_content_wbs, lv_pdf_content_lfg,ls_do_exist, lt_xml.
+            DELETE lt_data2mail WHERE carrier = ls_tmp1-carrier.
+            lv_car = VALUE #( lt_data2mail[ 1 ]-carrier OPTIONAL ).
+            CONTINUE.
+
+          CATCH cx_send_req_bcs.
+            MESSAGE 'Send mail failed !' TYPE 'E'.
+            APPEND VALUE #( type = 'E'
+                                 message = 'Send mail failed !'
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~process_invoice_pdf.
+
+    TYPES:  tr_rang_vbeln TYPE RANGE OF vbeln_vl.
+    DATA: lr_rng_inv TYPE tr_rang_vbeln.
+    DATA: lt_output_type   TYPE /rb1m/sd_t_output_type.
+    DATA: ls_pdf_file     TYPE fpformoutput.
+    DATA : lr_proc            TYPE /rb1m/if_sd_printout_dataprovd=>tr_proc.
+
+*     Not processed - 0 - Yellow
+*    Successfully processed - 1 - Green
+
+    SPLIT iv_process_status  AT '|' INTO DATA(lv_sta_green) DATA(lv_sta_yellow).
+
+    IF lv_sta_green IS NOT INITIAL.
+      lr_proc = VALUE #( BASE lr_proc ( sign = 'I' option = 'EQ' low = lv_sta_green  ) ).
+    ENDIF.
+    IF lv_sta_yellow IS NOT INITIAL .
+      lr_proc = VALUE #( BASE lr_proc ( sign = 'I' option = 'EQ' low = lv_sta_yellow  ) ).
+
+    ENDIF.
+    CHECK it_delivery_numbers IS NOT INITIAL.
+    SELECT subsequentdocument AS  vbeln, precedingdocument AS vbelv
+      INTO TABLE @DATA(lt_doc_flow)
+      FROM i_sddocumentmultilevelprocflow
+      FOR ALL ENTRIES IN @it_delivery_numbers
+      WHERE  precedingdocument = @it_delivery_numbers-vbeln
+       AND subsequentdocumentcategory = 'M'.
+    IF sy-subrc = 0.
+      lr_rng_inv[] = VALUE #( FOR GROUPS OF ls_inv IN lt_doc_flow
+                                      GROUP BY ls_inv-vbeln
+                                      ( sign   = 'I'
+                                        option = 'EQ'
+                                        low    = ls_inv-vbeln ) ).
+* Get invoice list
+      SELECT DISTINCT *
+       FROM /rb1m/sd_i_output
+        INTO TABLE @DATA(lt_output_invoice)
+        WHERE document IN @lr_rng_inv
+          AND transmission = '1'
+          AND processstatus IN @lr_proc
+          AND application = 'V3'
+          AND partnerfunction = 'RE'
+          AND ( outputtype = 'YO36' )
+        ORDER BY document ,outputtype.
+
+      CHECK sy-subrc = 0.
+
+      lt_output_type =  CORRESPONDING #( lt_output_invoice MAPPING
+                                                 document       = document
+                                                 outputtype       = outputtype
+                                                 application      = application
+                                                 language         = language
+                                                 parner          = parner
+                                                 partnerfunction  = partnerfunction
+                                                 programname      = programname
+                                                 transmission     = transmission
+                                                 processstatus    =  processstatus
+                                                 pdfformname      = pdfformname
+                                                 routinename      = routinename
+                                                ).
+
+      " CLEAR /rb1m/cl_sd_printout_dataprovd=>ms_fpformoutput.
+      "      LOOP AT lt_output_type ASSIGNING FIELD-SYMBOL(<fs_output_type>).
+      "        CONCATENATE 'YF2M' <fs_output_type>-objectkey  <fs_output_type>-messagetype INTO DATA(lv_output).
+      "        SUBMIT (<fs_output_type>-programname) VIA SELECTION-SCREEN
+      "               WITH pa_imp = lv_output  AND RETURN.
+      "        " IMPORT ls_pdf_file FROM MEMORY ID 'ANYF2M'.
+      "        IF sy-subrc = 0.
+      "          ls_pdf_file  = /rb1m/cl_sd_printout_dataprovd=>ms_fpformoutput.
+      "          CLEAR /rb1m/cl_sd_printout_dataprovd=>ms_fpformoutput.
+      "          APPEND VALUE #( vbeln        = <fs_output_type>-objectkey
+      "                          pdf_doc_type = 'INVO'
+      "                          kschl        = <fs_output_type>-messagetype
+      "                          tbpdf        = ls_pdf_file
+      "                          ) TO et_invoice_pdf.
+      "        ENDIF.
+      "        CLEAR: ls_pdf_file,lv_output.
+      "      ENDLOOP.
+
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~process_ship_delv_pdf.
+
+    DATA: ls_pdf_file    TYPE fpformoutput,
+          lt_output_type TYPE /rb1m/cl_sd_printout_d_mpc=>tt_output,
+          ls_output_type TYPE /rb1m/sd_i_output,
+          ls_ppf_act TYPE /BOFU/S_PPF_ACT.
+    DATA lo_sd_printout_static TYPE REF TO /rb1m/cl_sd_printout_static.
+
+    TRY.
+
+        lt_output_type = CORRESPONDING #( it_output_type ).
+        SORT lt_output_type ASCENDING BY codocument document application messagetype actiontype.
+        DELETE ADJACENT DUPLICATES FROM lt_output_type COMPARING codocument document application messagetype actiontype.
+
+        LOOP AT lt_output_type ASSIGNING FIELD-SYMBOL(<fs_output_type>) .
+
+          CLEAR: ls_pdf_file, ls_output_type.
+
+          lo_sd_printout_static = /rb1m/cl_sd_printout_static=>get_instance( ).
+          ls_output_type = CORRESPONDING #( <fs_output_type> MAPPING
+                                                          codocument            = codocument
+                                                          document              = document
+                                                          outputtype            = messagetype
+                                                          application           = application
+                                                          language              = language
+                                                          parner                = partner
+                                                          partnerfunction       = partnerfunction
+                                                          programname           = programname
+                                                          routinename           = routinename
+                                                          pdfformname           = formname
+                                                          description           = description
+                                                          processstatus         = processstatus
+                                                          formtype              = formtype
+                                                          ).
+
+          lo_sd_printout_static->set_key_data( is_key = ls_output_type ).
+          IF <fs_output_type>-routinename IS NOT INITIAL AND
+            <fs_output_type>-programname IS NOT INITIAL .
+
+            PERFORM (<fs_output_type>-routinename) IN PROGRAM (<fs_output_type>-programname) USING '' ''.
+            IF sy-subrc = 0.
+
+              " BREAK-POINT.
+
+              ls_pdf_file = lo_sd_printout_static->get_fpformoutput( ).
+
+              IF ls_pdf_file-pdf IS NOT INITIAL.
+                CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~read_prefix_outputtype(
+                  EXPORTING
+                    iv_outputtype = <fs_output_type>-messagetype
+                  IMPORTING
+                    ev_prefix     = DATA(lv_prefix) ).
+              ENDIF.
+
+            ENDIF.
+          ENDIF.
+*         action type from PPF Framework....
+          IF <fs_output_type>-actiontype IS NOT INITIAL.
+            ls_ppf_act-ppf_action = <fs_output_type>-actiontype.
+            CALL METHOD /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~prepare_data_to_print_document(
+              EXPORTING
+                is_ppf_act    = ls_ppf_act
+                it_output     = VALUE #( ( <fs_output_type> ) )
+              IMPORTING
+                es_formoutput = DATA(ls_formoutput)
+            ).
+*           Get PDF from Action PPF....
+
+            ls_pdf_file = COND #( WHEN ls_formoutput IS NOT INITIAL
+                                  THEN ls_formoutput ).
+
+            IF ls_pdf_file-pdf IS NOT INITIAL.
+              CLEAR lv_prefix.
+              DATA(lv_messagetype) =  SWITCH #( <fs_output_type>-actiontype
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7a
+                                                      THEN 'YO7A'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7c
+                                                      THEN 'YO7C'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7d
+                                                      THEN 'YO7D'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7f
+                                                      THEN 'YO7F'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_yo7g
+                                                      THEN 'YO7G'
+                                                      WHEN /rb1m/cl_tm_co_transp_common=>/rb1m/if_tm_transp_common~sc_ppf_action-action_to_print_cmr
+                                                      THEN 'YCMR'
+                                                      ).
+
+              CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~read_prefix_outputtype(
+                EXPORTING
+                  iv_outputtype = lv_messagetype
+                IMPORTING
+                  ev_prefix     = lv_prefix ).
+            ENDIF.
+
+          ENDIF.
+
+          APPEND VALUE #( carrier = <fs_output_type>-carrier
+                          carriername = <fs_output_type>-carriername
+                          freightorderdocument = <fs_output_type>-freightorderdocument
+                          codocument   = <fs_output_type>-codocument "consignment order
+                          vbeln        = <fs_output_type>-document " Object key in nast
+                          invoice      = <fs_output_type>-invoicedocument
+                          pdf_doc_type = lv_prefix
+                          kappl        = <fs_output_type>-application
+                          kschl        = <fs_output_type>-messagetype
+                          description  = <fs_output_type>-description
+                          tbpdf        = ls_pdf_file
+                          fudocument   = <fs_output_type>-fudocument
+                          vstel = <fs_output_type>-shippingpoint
+                          shippingpointaddressid = <fs_output_type>-shippingpointadressid
+                          ) TO et_shp_dlv_pdf.
+
+          lo_sd_printout_static->clear_key_data( ).
+        ENDLOOP.
+        IF lo_sd_printout_static IS BOUND.
+          lo_sd_printout_static->clear_instance( ).
+          CLEAR lo_sd_printout_static.
+        ENDIF.
+      CATCH /rb1m/cx_sd_printout_data_exc.
+        IF lo_sd_printout_static IS BOUND.
+          lo_sd_printout_static->clear_key_data( ).
+          lo_sd_printout_static->clear_instance( ).
+          CLEAR lo_sd_printout_static.
+        ENDIF.
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~read_prefix_outputtype.
+    TYPES : BEGIN OF ty_prefix,
+              outputtype TYPE kschl,
+              prefix     TYPE char10,
+            END OF ty_prefix.
+    DATA: lt_prefix TYPE TABLE OF ty_prefix.
+
+    lt_prefix = VALUE #( ( outputtype = 'YO2D' prefix = 'PL'    )
+                         ( outputtype = 'YO2A' prefix = 'DN'    )
+                         ( outputtype = 'YO2B' prefix = 'GDN'   )
+                         ( outputtype = 'YO2C' prefix = 'GDN2'  )
+                         ( outputtype = 'YO36' prefix = 'INV'   )
+                         ( outputtype = 'YIP2' prefix = 'INV'   )
+                         ( outputtype = 'YO7A' prefix = 'TA'    )
+                         ( outputtype = 'YO7C' prefix = 'YLAD'  )
+                         ( outputtype = 'YO7D' prefix = 'TA_VW' )
+                         ( outputtype = 'YO7F' prefix = 'TA_VW2')
+                         ( outputtype = 'YCMR' prefix = 'CMR')
+                         ( outputtype = 'YO7G' prefix = 'CL' )  ).
+    ev_prefix = VALUE #( lt_prefix[ outputtype = iv_outputtype ]-prefix OPTIONAL ).
+
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~send_mail.
+
+    DATA: lv_pdf_size_wbs  TYPE so_obj_len,
+          lv_datasize      TYPE so_obj_len,
+          lv_pdf_size_lfg  TYPE so_obj_len,
+          lv_ex_size       TYPE so_obj_len,
+          lv_subject       TYPE so_obj_des,
+          lv_subject2      TYPE string,
+          lt_text          TYPE soli_tab,
+          lt_text_html     TYPE string,
+          lv_text          TYPE soli,
+          lo_bcs_exception TYPE REF TO cx_bcs,
+          lo_recipient     TYPE REF TO if_recipient_bcs,
+          lv_sent_to_all   TYPE os_boolean,
+          lo_send_request  TYPE REF TO cl_bcs,
+          lt_stxh          TYPE stxh.
+
+    DATA:
+      lv_error_text      TYPE string,
+      lv_rc              TYPE i,
+      lv_merged_document TYPE xstring,
+      lv_deli            TYPE string,
+      lo_document        TYPE REF TO cl_document_bcs,
+      lo_pdf_merger      TYPE REF TO cl_rspo_pdf_merge,
+      lv_pdf_doc_type    TYPE /rb1m/sd_pdf_doc_type,
+      ls_formoutput      TYPE fpformoutput,
+      lt_excel_binary	   TYPE solix_tab,
+      lv_pdf_content_wbs TYPE solix_tab,
+      lv_pdf_content_lfg TYPE solix_tab,
+      lv_email           TYPE adr6-smtp_addr,
+      lv_xhtml_string    TYPE xstring,
+      lt_hex_html        TYPE solix_tab.
+    DATA: lw_document  TYPE xstring,
+          lt_data2mail TYPE /rb1m/sd_t_pdf_data2mail,
+          lt_fo        TYPE TABLE OF vbeln.
+    DATA: ls_addrs              TYPE addr1_sel.
+    ls_addrs-addrnumber = VALUE #( it_pdf_data[ 1 ]-shippingpointaddressid OPTIONAL ).
+
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_shippingpoint_address
+      EXPORTING
+        is_address    = ls_addrs
+      IMPORTING
+        es_adrs_print = DATA(ls_adrs_shippingpoint).
+
+    DATA(lt_pdf_data) = it_pdf_data.
+
+    LOOP AT lt_pdf_data ASSIGNING FIELD-SYMBOL(<lfs_pdf>).
+      DATA(ls_output) = VALUE #( it_output[ document = <lfs_pdf>-vbeln ] OPTIONAL ).
+      IF ls_output is NOT INITIAL .
+        <lfs_pdf>-fudocument = ls_output-fudocument.
+      ENDIF.
+      CLEAR ls_output.
+    ENDLOOP.
+
+    TRY.
+        CASE iv_merge_opt.
+          WHEN '01'.  " single doc per CO
+            CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~send_single_doc_per_co
+              EXPORTING
+                is_shippingpoint_adrs = ls_adrs_shippingpoint
+                iv_export_excel       = iv_export_excel
+                iv_export_invoice     = iv_export_invoice
+                it_pdf_data           = lt_pdf_data
+                it_body_text          = it_body_text
+                iv_body_html          = iv_body_html
+                it_recipients         = it_recipients
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                et_return             = DATA(lt_return).
+          WHEN '02'.  " same of Carrier, single Mail for each FO
+            CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~merge_per_carrier_fo
+              EXPORTING
+                is_shippingpoint_adrs = ls_adrs_shippingpoint
+                iv_export_excel       = iv_export_excel
+                it_pdf_data           = lt_pdf_data
+                it_body_text          = it_body_text
+                iv_body_html          = iv_body_html
+                it_recipients         = it_recipients
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                et_return             = lt_return.
+          WHEN '03'.  " same of Carrier, single Mail for each CO
+            CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~merge_per_carrier_co
+              EXPORTING
+                is_shippingpoint_adrs = ls_adrs_shippingpoint
+                iv_export_excel       = iv_export_excel
+                it_pdf_data           = lt_pdf_data
+                it_body_text          = it_body_text
+                iv_body_html          = iv_body_html
+                it_recipients         = it_recipients
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                et_return             = lt_return.
+
+          WHEN '04'.  " Merge one Doc per CO
+            CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~merge_pdf_per_co
+              EXPORTING
+                is_shippingpoint_adrs = ls_adrs_shippingpoint
+                it_pdf_data           = lt_pdf_data
+                it_body_text          = it_body_text
+                iv_body_html          = iv_body_html
+                iv_export_excel       = iv_export_excel
+                it_recipients         = it_recipients
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                et_return             = lt_return.
+
+          WHEN '05'.  " Merge per FO
+            CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~merge_pdf_per_fo
+              EXPORTING
+                is_shippingpoint_adrs = ls_adrs_shippingpoint
+                iv_export_excel       = iv_export_excel
+                it_pdf_data           = lt_pdf_data
+                it_body_text          = it_body_text
+                iv_body_html          = iv_body_html
+                it_recipients         = it_recipients
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                et_return             = lt_return.
+
+          WHEN '06'.  " single doc per CO
+            CALL METHOD /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~send_single_mail_per_pdf
+              EXPORTING
+                is_shippingpoint_adrs = ls_adrs_shippingpoint
+                iv_export_excel       = iv_export_excel
+                iv_export_invoice     = iv_export_invoice
+                it_pdf_data           = lt_pdf_data
+                it_body_text          = it_body_text
+                iv_body_html          = iv_body_html
+                it_recipients         = it_recipients
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                et_return             = lt_return.
+        ENDCASE.
+
+        IF lt_return IS NOT INITIAL.
+          DATA(lv_ret) = VALUE #( lt_return[ 1 ]-type ).
+        ELSE.
+          lv_ret = 'S'.
+        ENDIF.
+
+        IF lv_ret = 'E'.
+          ROLLBACK WORK.
+          MESSAGE 'Sent mail Failed!' TYPE 'E'.
+          APPEND VALUE #( type = 'E'
+                              message = 'Error occurred!'
+                     )
+               TO et_return.
+        ELSE.
+
+          COMMIT WORK.
+          MESSAGE 'Sent mail Successfully!' TYPE 'S'.
+          APPEND VALUE #( type = 'S'
+                               message = 'Sent mail Successfully!'
+                      )
+          TO et_return.
+        ENDIF.
+
+      CATCH cx_bcs  INTO lo_bcs_exception.
+        FREE lo_document.
+        CLEAR lo_document.
+        ROLLBACK WORK.
+        MESSAGE 'Sent mail Failed!' TYPE 'E'.
+        " WRITE: 'Error occurred'.
+        "WRITE: 'Errortype ', lo_bcs_exception->error_type.
+        APPEND VALUE #( type = 'E'
+                             message = 'Error occurred!'
+                    )
+              TO et_return.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~send_single_doc_per_co.
+    DATA: lv_pdf_size_wbs    TYPE so_obj_len,
+          lv_datasize        TYPE so_obj_len,
+          lv_subject         TYPE so_obj_des,
+          lv_subject2        TYPE string,
+          lt_text            TYPE soli_tab,
+          lt_text_html       TYPE string,
+          lo_cx_document_bcs TYPE REF TO cx_document_bcs,
+          lo_recipient       TYPE REF TO if_recipient_bcs,
+          lv_sent_to_all     TYPE os_boolean,
+          lo_send_request    TYPE REF TO cl_bcs
+          .
+    DATA:
+      lo_document        TYPE REF TO cl_document_bcs,
+      lv_pdf_content_lfg TYPE solix_tab,
+      lv_email           TYPE adr6-smtp_addr
+      .
+    DATA: lt_freightorder TYPE /rb1m/cl_sd_printout_d_mpc_ext=>tt_freightorder.
+
+    DATA:
+          lt_data2mail TYPE /rb1m/sd_t_pdf_data2mail.
+    DATA: lo_writer TYPE REF TO /rb4c/if_ca_a2xl_writer.
+    DATA: lt_attachment_header  TYPE soli_tab,
+          ls_attachment_header  LIKE LINE OF lt_attachment_header,
+          lv_attachment_subject TYPE sood-objdes,
+          lv_bytecount          TYPE sood-objlen.
+    DATA: lv_xml_data TYPE xstring,
+          lt_xml      TYPE solix_tab.
+    DATA: lv_title(20)            TYPE c,
+          lv_title_translated(20) TYPE c.
+    CONSTANTS:
+      lc_beginhtmltag TYPE char30 VALUE '<html> <body>',
+      lc_endhtmltag   TYPE char30 VALUE '</body> </html>'.
+
+    IF it_body_text IS NOT INITIAL.
+      lt_text = it_body_text.
+    ELSE.
+      lt_text_html = iv_body_html.
+      lt_text_html = lc_beginhtmltag && lt_text_html.
+    ENDIF.
+
+    DATA(lv_co) = VALUE #( it_pdf_data[ 1 ]-codocument OPTIONAL ).
+    lt_data2mail = CORRESPONDING #( it_pdf_data ).
+*   Check if the language from Front End of PDF2Mail App is different than sy-langu
+*   Background processing is setting always to system language.....
+    IF is_deepdata_data2mail-email_language NE sy-langu.
+      SET LANGUAGE is_deepdata_data2mail-email_language.
+      lv_title_translated = TEXT-002.
+      SET LANGUAGE sy-langu.
+    ELSE.
+      lv_title_translated = TEXT-002.
+    ENDIF.
+    IF iv_export_excel EQ abap_true .
+      lt_freightorder = CORRESPONDING #( it_pdf_data MAPPING codocument = codocument
+                                                            freightorderdocument = freightorderdocument
+                                                            deliverydocument = vbeln
+                                                            freightorderunit = fudocument
+                                                            carrier = carrier ).
+      DELETE lt_freightorder WHERE deliverydocument+0(2) = '00'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = '7'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = 'A'.
+      SORT lt_freightorder.
+      DELETE ADJACENT DUPLICATES FROM lt_freightorder.
+    ENDIF.
+    LOOP AT it_pdf_data INTO DATA(ls_tmp).
+      CLEAR:
+            lt_text_html.
+
+      CHECK lt_data2mail IS NOT INITIAL.
+*     Check based on the CO Document number
+      IF ls_tmp-codocument EQ lv_co.
+        DATA(lv_fo) = ls_tmp-freightorderdocument.
+        DATA(lv_co_pre) = ls_tmp-codocument.
+
+        lv_title = lv_title_translated . " Bosch shipment
+*       Subject of Email
+        lv_subject = lv_title && | | && ls_tmp-codocument .
+*       Content of Email
+        lt_text_html = iv_body_html.
+        lt_text_html = lc_beginhtmltag && lt_text_html.
+        DATA(lv_string) = TEXT-004 && | | && is_shippingpoint_adrs-name1 && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-name2 && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-stras && | | && TEXT-003.
+        lt_text_html = lt_text_html && lv_string.
+        CLEAR lv_string.
+        lv_string = is_shippingpoint_adrs-pstlz && | | && is_shippingpoint_adrs-ort01 && | | && TEXT-005.
+        lt_text_html = lt_text_html && lv_string.
+        lt_text_html = lt_text_html && lc_endhtmltag.
+        lt_text = cl_bcs_convert=>string_to_soli( lt_text_html ).
+*       after that go to create the object of email
+        TRY.
+            IF it_body_text IS NOT INITIAL.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'RAW'
+                  i_text    = lt_text
+                  i_subject = lv_subject ).
+            ELSE.
+              lo_document = cl_document_bcs=>create_document(
+                  i_type    = 'HTM'
+                  i_text     = lt_text
+                  i_subject = lv_subject ).
+            ENDIF.
+
+          CATCH cx_document_bcs INTO lo_cx_document_bcs.
+            MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+            APPEND VALUE #( type = 'E'
+                                 message = TEXT-007   " Document creation failed !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+*       Start Export Excel
+        IF iv_export_excel EQ abap_true .
+          CLEAR : lt_xml,lt_attachment_header, lv_subject, lv_xml_data ,
+                  lv_bytecount, lv_attachment_subject, ls_attachment_header.
+
+          DATA(lt_co_excel) = lt_freightorder.
+          DELETE lt_co_excel WHERE codocument NE ls_tmp-codocument.
+          IF lt_co_excel IS NOT INITIAL .
+*           Create the Excel File in this method
+            CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_excel_data
+              EXPORTING
+                it_freightorder       = lt_co_excel
+                is_deepdata_data2mail = is_deepdata_data2mail
+              IMPORTING
+                eo_excel              = DATA(lo_excel).
+
+            DELETE ADJACENT DUPLICATES FROM lt_co_excel COMPARING codocument.
+            DATA(lv_line) = lines( lt_co_excel ).
+            CREATE OBJECT lo_writer TYPE /rb4c/cl_ca_a2xl_writer_2007.
+*           check if the excel file is available
+            IF lo_excel IS BOUND.
+              TRY.
+                  lv_xml_data = lo_writer->write_file( lo_excel ).
+
+                CATCH /rb4c/cx_ca_a2xl.
+                  MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                                       message = TEXT-007   " Document creation failed !
+                              )
+                        TO et_return.
+              ENDTRY.
+*             The size of file....
+              lv_bytecount = xstrlen( lv_xml_data ).
+              IF lv_xml_data IS NOT INITIAL.
+*                Content of Excel File....
+                TRY.
+                    lt_xml = COND #( WHEN lv_xml_data IS NOT INITIAL
+                                     THEN  cl_bcs_convert=>xstring_to_solix( iv_xstring  = lv_xml_data  ) ).
+                  CATCH cx_bcs.
+                    MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                    APPEND VALUE #( type = 'E'
+                                         message = TEXT-007   " Document creation failed !
+                                )
+                          TO et_return.
+                    EXIT.
+                ENDTRY.
+              ENDIF.
+            ENDIF.
+            IF lt_xml IS NOT INITIAL.
+*             Subject of File Excel
+              lv_subject = COND #( WHEN lv_line > 1 THEN lv_title_translated
+                                   ELSE 'CO_' && ls_tmp-codocument ).
+
+              TRY.
+                  lv_attachment_subject  = lv_subject && '.xlsx'.
+                  CONCATENATE '&SO_FILENAME=' lv_attachment_subject INTO ls_attachment_header.
+                  APPEND ls_attachment_header TO lt_attachment_header.
+*                  Put it into the attachment of object email created above
+                  lo_document->add_attachment(
+                                          i_attachment_type    = 'XLS'
+                                          i_att_content_hex    = lt_xml
+                                          i_attachment_size    = lv_bytecount
+                                          i_attachment_header  = lt_attachment_header
+                                          i_attachment_subject = lv_subject ).
+
+                CATCH cx_document_bcs.
+                  MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                                       message = TEXT-007   " Document creation failed !
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ELSE.
+            APPEND VALUE #( type = 'W'
+                       message = TEXT-008 && | | && ls_tmp-codocument ) TO et_return.
+            " No data attached to Delivery Note Application V2 for CO number
+          ENDIF.
+
+        ENDIF.
+*      End Export Excel
+*      Start the logic of merge Functionality,
+*      Optione 1 send each email per PDF document...
+        LOOP AT lt_data2mail  INTO DATA(ls_pdf_data) WHERE codocument = ls_tmp-codocument
+                                                       AND tbpdf-pdf IS NOT INITIAL
+                                                          GROUP BY  ( codocument = ls_pdf_data-codocument
+                                                                      size  = GROUP SIZE
+                                                                   index = GROUP INDEX )
+                                                        ASCENDING
+                                                        REFERENCE INTO DATA(co_group).
+
+          LOOP AT GROUP co_group ASSIGNING FIELD-SYMBOL(<fl_codocument>).
+            CLEAR: lv_datasize,lv_subject,lv_pdf_size_wbs, lv_pdf_content_lfg.
+            lv_pdf_size_wbs = xstrlen( <fl_codocument>-tbpdf-pdf ).
+            lv_pdf_content_lfg = cl_document_bcs=>xstring_to_solix(
+                                                ip_xstring = <fl_codocument>-tbpdf-pdf ).
+*             limitation size of PDF file
+            lv_datasize = lv_datasize + lv_pdf_size_wbs.
+            IF lv_datasize > 20971520.
+              MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+              APPEND VALUE #( type = 'E'
+                                   message = TEXT-007   " Document creation failed !
+                          )
+                    TO et_return.
+              EXIT.
+            ENDIF.
+            IF lv_pdf_content_lfg IS NOT INITIAL.
+
+              lv_subject = SWITCH #( <fl_codocument>-kappl
+                                   WHEN 'V7' OR 'CO'
+                                   THEN <fl_codocument>-pdf_doc_type && || && '_' && || && <fl_codocument>-codocument
+                                   WHEN 'V2'
+                                   THEN <fl_codocument>-pdf_doc_type && || && '_' && || && <fl_codocument>-vbeln
+                                   WHEN 'V3'
+                                   THEN <fl_codocument>-pdf_doc_type && || && '_' && || && <fl_codocument>-vbeln && '_' && || && <fl_codocument>-kschl
+*                                   WHEN 'CO'
+*                                   THEN <fl_codocument>-description
+                                    ).
+
+              TRY.
+                  lo_document->add_attachment(
+                        i_attachment_type    = 'PDF'
+                        i_att_content_hex    = lv_pdf_content_lfg
+                        i_attachment_size    = lv_datasize
+                        i_attachment_subject = lv_subject ).
+
+                CATCH cx_document_bcs INTO lo_cx_document_bcs.
+                  MESSAGE TEXT-006 TYPE 'E'.  " Document is failed to generate !
+                  APPEND VALUE #( type = 'E'
+                                       message = TEXT-007   " Document creation failed !
+                              )
+                        TO et_return.
+                  EXIT.
+              ENDTRY.
+            ENDIF.
+          ENDLOOP.
+        ENDLOOP.
+        TRY.
+*          Subject
+            IF lv_fo IS INITIAL.
+              lv_subject2 = lv_title_translated && | | && lv_co_pre.
+            ELSE.
+              lv_subject2 = lv_title_translated && | | && lv_co_pre && | | && '/' && | | && lv_fo .
+            ENDIF.
+
+
+            lo_send_request = cl_bcs=>create_persistent( ).
+            lo_send_request->set_message_subject( ip_subject = lv_subject2 ).
+
+*           Email address....
+            TRY.
+
+                LOOP AT it_recipients INTO DATA(ls_recipient).
+                  MOVE ls_recipient-line TO lv_email .
+                  lo_recipient = cl_cam_address_bcs=>create_internet_address(
+                     i_address_string = lv_email ).
+                  lo_send_request->add_recipient( i_recipient = lo_recipient i_blind_copy = 'X' ).
+                ENDLOOP.
+              CATCH cx_address_bcs.
+
+            ENDTRY.
+
+            lo_send_request->set_document( lo_document ).
+*           Check if the file of Excel or PDF available, then send the email.....
+            IF lv_pdf_content_lfg IS NOT INITIAL OR lt_xml IS NOT INITIAL.
+              lv_sent_to_all = lo_send_request->send( i_with_error_screen = 'X' ).
+            ELSE.
+              lv_sent_to_all =  abap_false.
+            ENDIF.
+
+            IF lv_sent_to_all EQ abap_true.
+              MESSAGE TEXT-009 && || &&  lv_co_pre && | | && '/' && | | && lv_fo TYPE 'S'.
+              APPEND VALUE #( type = 'S'
+                     message = TEXT-009 && || &&  lv_co_pre && | | && '/' && | | && lv_fo
+            )
+              TO et_return.
+
+            ENDIF.
+            FREE :lo_send_request, lo_document.
+            CLEAR:  lv_pdf_content_lfg, lt_xml.
+            DELETE lt_data2mail WHERE codocument = ls_tmp-codocument.
+            lv_co = VALUE #( lt_data2mail[ 1 ]-codocument OPTIONAL ).
+            CONTINUE.
+          CATCH cx_send_req_bcs INTO DATA(lo_send_req_bcs).
+            MESSAGE TEXT-010 TYPE 'E'.            "Send mail failed !
+            APPEND VALUE #( type = 'E'
+                         message = TEXT-010    "Send mail failed !
+                        )
+                  TO et_return.
+            EXIT.
+        ENDTRY.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~send_single_mail_per_pdf.
+    DATA: lv_pdf_size_wbs     TYPE so_obj_len,
+          lv_invoice_size_wbs TYPE so_obj_len,
+          lv_datasize         TYPE so_obj_len,
+          lv_pdf_size_lfg     TYPE so_obj_len,
+*          lv_ex_size          TYPE so_obj_len,
+          lv_subject          TYPE so_obj_des,
+          lv_filename         TYPE so_obj_des,
+          lv_subject2         TYPE string,
+          lt_text             TYPE soli_tab,
+          lt_text_html        TYPE string,
+          lv_text             TYPE soli,
+*          lo_bcs_exception    TYPE REF TO cx_bcs,
+          lo_cx_document_bcs  TYPE REF TO cx_document_bcs,
+          lo_recipient        TYPE REF TO if_recipient_bcs,
+          lv_sent_to_all      TYPE os_boolean,
+          lo_send_request     TYPE REF TO cl_bcs.
+    DATA:
+      lv_error_text           TYPE string,
+      lv_rc                   TYPE i,
+      lv_merged_document      TYPE xstring,
+      lo_document             TYPE REF TO cl_document_bcs,
+      lo_pdf_merger           TYPE REF TO cl_rspo_pdf_merge,
+      ls_formoutput           TYPE fpformoutput,
+      lv_pdf_content_wbs      TYPE solix_tab,
+      lv_xml_content_wbs      TYPE solix_tab,
+      lv_invoice_content_wbs  TYPE solix_tab,
+      lv_pdf_content_lfg      TYPE solix_tab,
+      lv_email                TYPE adr6-smtp_addr,
+      lv_title_translated(20) TYPE c.
+
+    DATA: lw_document  TYPE xstring,
+          lt_data2mail TYPE /rb1m/sd_t_pdf_data2mail,
+          lt_fo_tmp    TYPE /rb1m/sd_t_pdf_data2mail.
+    DATA: lt_freightorder TYPE /rb1m/cl_sd_printout_d_mpc_ext=>tt_freightorder.
+    DATA: lt_text_bcdy TYPE soli_tab,
+          ls_soli      TYPE soli.
+    CONSTANTS:
+      lc_beginhtmltag TYPE char30 VALUE ' <html> <body> ',
+      lc_endhtmltag   TYPE char30 VALUE ' </body> </html> '.
+
+*   Check if the language from Front End of PDF2Mail App is different than sy-langu
+*   Background processing is setting always to system language.....
+    IF is_deepdata_data2mail-email_language NE sy-langu.
+      SET LANGUAGE is_deepdata_data2mail-email_language.
+      lv_title_translated = TEXT-002.
+      SET LANGUAGE sy-langu.
+    ELSE.
+      lv_title_translated = TEXT-002.
+
+    ENDIF.
+
+    IF it_body_text IS NOT INITIAL.
+      lt_text = it_body_text.
+    ELSE.
+      lt_text_html = iv_body_html.
+      lt_text_html = lc_beginhtmltag && lt_text_html.
+*      lt_text = cl_bcs_convert=>string_to_soli( lt_text_html ).
+    ENDIF.
+
+    SORT it_pdf_data ASCENDING BY codocument.
+    DATA(lv_co) = VALUE #( it_pdf_data[ 1 ]-codocument OPTIONAL ).
+    lt_data2mail = CORRESPONDING #( it_pdf_data ).
+    IF iv_export_excel EQ abap_true .
+      lt_freightorder = CORRESPONDING #( it_pdf_data MAPPING codocument = codocument
+                                                            freightorderdocument = freightorderdocument
+                                                            deliverydocument = vbeln
+                                                            freightorderunit = fudocument
+                                                            carrier = carrier ).
+      DELETE lt_freightorder WHERE deliverydocument+0(2) = '00'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = '7'.
+      DELETE lt_freightorder WHERE deliverydocument+0(1) = 'A'.
+      SORT lt_freightorder.
+      DELETE ADJACENT DUPLICATES FROM lt_freightorder.
+    ENDIF.
+*    CLEAR : lv_prev_key_excel.
+    LOOP AT it_pdf_data INTO DATA(ls_pdf_data).
+
+      CLEAR: lt_text_bcdy,lt_text_html.
+*          Subject
+      DATA(lv_fo) = ls_pdf_data-freightorderdocument.
+      DATA(lv_co_pre) = ls_pdf_data-codocument.
+*          Subject
+      DATA(lv_title) = lv_title_translated .
+
+      CASE ls_pdf_data-kappl.
+        WHEN 'V2'.
+          lv_filename = ls_pdf_data-pdf_doc_type && '_' && ls_pdf_data-vbeln.
+        WHEN 'V7' OR 'CO'.
+          lv_filename = ls_pdf_data-pdf_doc_type && '_' && ls_pdf_data-codocument.
+        WHEN 'V3'.
+          lv_filename = ls_pdf_data-pdf_doc_type && || && '_' && || && ls_pdf_data-vbeln && '_' && || && ls_pdf_data-kschl.
+*        WHEN 'CO'.
+*          lv_filename =  ls_pdf_data-description.
+
+      ENDCASE.
+
+      IF ls_pdf_data-tbpdf IS NOT INITIAL.
+        lv_subject = lv_title && | | && lv_filename.
+      ELSEIF ls_pdf_data-tbpdf IS INITIAL AND iv_export_excel EQ abap_true.
+        lv_subject = lv_title_translated && | | && lv_co_pre && | | && '/' && | | && lv_fo .
+      ENDIF.
+
+      lt_text_html = iv_body_html.
+      lt_text_html = lc_beginhtmltag && lt_text_html.
+      DATA(lv_string) = '<p>' && | | && is_shippingpoint_adrs-name1 && | | && '<br> '.
+      lt_text_html = lt_text_html && lv_string.
+      CLEAR lv_string.
+      lv_string = is_shippingpoint_adrs-name2 && | | && '<br> '.
+      lt_text_html = lt_text_html && lv_string.
+      CLEAR lv_string.
+      lv_string = is_shippingpoint_adrs-stras && | | && '<br> '.
+      lt_text_html = lt_text_html && lv_string.
+      CLEAR lv_string.
+      lv_string = is_shippingpoint_adrs-pstlz && | | && is_shippingpoint_adrs-ort01 && | | && '</p> '.
+      lt_text_html = lt_text_html && lv_string.
+      lt_text_html = lt_text_html && lc_endhtmltag.
+      lt_text = cl_bcs_convert=>string_to_soli( lt_text_html ).
+      TRY.
+          IF it_body_text IS NOT INITIAL.
+            lo_document = cl_document_bcs=>create_document(
+                i_type    = 'RAW'
+                i_text    = lt_text
+                i_length  = lv_pdf_size_lfg
+                i_subject = lv_subject ).
+          ELSE.
+            lo_document = cl_document_bcs=>create_document(
+                i_type    = 'HTM'
+                i_text     = lt_text
+                i_length  = lv_pdf_size_lfg
+                i_subject = lv_subject ).
+          ENDIF.
+
+        CATCH cx_document_bcs INTO lo_cx_document_bcs.
+          MESSAGE 'Document is failed to generate !' TYPE 'E'.
+          APPEND VALUE #( type = 'E'
+                               message = 'Document creation failed !'
+                      )
+                TO et_return.
+          EXIT.
+      ENDTRY.
+
+      IF ls_pdf_data-tbpdf-pdf IS NOT INITIAL.
+
+        lv_pdf_size_wbs = xstrlen( ls_pdf_data-tbpdf-pdf ).
+        lv_pdf_content_wbs = cl_document_bcs=>xstring_to_solix(
+                                            ip_xstring = ls_pdf_data-tbpdf-pdf ).
+*               limitation size of PDF file
+        lv_datasize = lv_datasize + lv_pdf_size_wbs.
+        IF lv_datasize > 20971520.
+          MESSAGE 'File attach over size!' TYPE 'E'.
+          APPEND VALUE #( type = 'E'
+                          message = 'File attach over size!'
+                             )
+                       TO et_return.
+          EXIT.
+        ENDIF.
+        IF lv_pdf_content_wbs IS NOT INITIAL.
+*  *
+          TRY.
+              lo_document->add_attachment(
+                    i_attachment_type    = 'PDF'
+                    i_att_content_hex    = lv_pdf_content_wbs
+                    i_attachment_size    = lv_datasize
+                    i_attachment_subject = lv_filename ).
+
+            CATCH cx_document_bcs INTO lo_cx_document_bcs.
+              MESSAGE 'Document attached fail !' TYPE 'E'.
+              APPEND VALUE #( type = 'E'
+                                   message = 'Document attached fail !'
+                          )
+                    TO et_return.
+              EXIT.
+          ENDTRY.
+        ENDIF.
+      ENDIF.
+
+      TRY.
+*          Subject
+          lv_subject2 = lv_title_translated && | | && lv_co_pre && | | && '/' && | | && lv_fo .
+
+          lo_send_request = cl_bcs=>create_persistent( ).
+          lo_send_request->set_message_subject( ip_subject = lv_subject2 ).
+
+*           Email address....
+          TRY.
+
+              LOOP AT it_recipients INTO DATA(ls_recipient).
+                MOVE ls_recipient-line TO lv_email .
+                lo_recipient = cl_cam_address_bcs=>create_internet_address(
+                   i_address_string = lv_email ).
+                lo_send_request->add_recipient( i_recipient = lo_recipient i_blind_copy = 'X' ).
+              ENDLOOP.
+            CATCH cx_address_bcs.
+
+          ENDTRY.
+
+          lo_send_request->set_document( lo_document ).
+
+          IF lv_invoice_content_wbs IS INITIAL AND lv_xml_content_wbs IS INITIAL AND ls_pdf_data-tbpdf-pdf IS INITIAL.
+            lv_sent_to_all = abap_false.
+
+          ELSE.
+            lv_sent_to_all = lo_send_request->send( i_with_error_screen = 'X' ).
+          ENDIF.
+
+
+          IF lv_sent_to_all EQ abap_true.
+            DATA(lv_txt) = 'Document attached to email successfully !' && || &&  lv_co_pre && | | && '/' && | | && lv_fo.
+            MESSAGE lv_txt TYPE 'S'.
+            APPEND VALUE #( type = 'S'
+                   message = lv_txt
+          )
+            TO et_return.
+
+          ENDIF.
+          FREE :lo_send_request, lo_document.
+          CLEAR :  lv_invoice_content_wbs,lv_xml_content_wbs , ls_pdf_data-tbpdf-pdf.
+*          ls_do_exist.
+
+          IF ls_pdf_data-tbpdf-pdf IS INITIAL.
+            DELETE lt_data2mail WHERE vbeln = ls_pdf_data-vbeln.
+*            lv_prev_key_excel = lv_key_excel.
+          ENDIF.
+
+        CATCH cx_send_req_bcs INTO DATA(lo_send_req_bcs).
+          MESSAGE 'Send mail failed !' TYPE 'E'.
+          APPEND VALUE #( type = 'E'
+                               message = 'Send mail failed !'
+                      )
+                TO et_return.
+          EXIT.
+      ENDTRY.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~check_mlb_invoice.
+    DATA : lt_additional_data TYPE zacs_csf_addatit_tt.
+    CHECK iv_delivery_number IS NOT INITIAL.
+    "get SO Number
+    SELECT SINGLE
+       FROM  i_sddocumentprocessflow
+      WITH PRIVILEGED ACCESS  FIELDS precedingdocument, precedingdocumentitem
+    WHERE subsequentdocument EQ @iv_delivery_number
+    INTO @DATA(ls_so).
+    IF sy-subrc IS INITIAL.
+      CALL FUNCTION 'Z_ACS_CSF_ADDAT_VALID_READ'
+        EXPORTING
+          iv_vbeln   = ls_so-precedingdocument
+          iv_posnr   = ls_so-precedingdocumentitem
+        IMPORTING
+          et_addatit = lt_additional_data.
+       IF lt_additional_data is NOT INITIAL.
+          "The original-sold-to will be already stored in the ADDAT-table with qualifier ‘ORST’.
+          "If an record exists with qualifier ‘ORST’, MLB
+          "If not, no MLB
+          IF line_exists( lt_additional_data[ txqlf =
+            /rb4r/if_sd_det_supplier_code=>sc_qualifier-orginal_sold_to ] )."MLB
+            ev_ismlb = abap_true.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+  ENDMETHOD.
+
+
+  method /RB1M/IF_SD_PRINTOUT_UTIL~GET_RFC_DESTINATION.
+      DATA:  lv_logsys TYPE logsys.
+*-Fetch System ID
+    CALL FUNCTION 'OWN_LOGICAL_SYSTEM_GET'
+      IMPORTING
+        own_logical_system             = lv_logsys
+      EXCEPTIONS
+        own_logical_system_not_defined = 1
+        OTHERS                         = 2.
+    IF sy-subrc <> 0.
+      CLEAR rv_rfc_dest.
+      RETURN.
+    ENDIF.
+
+*-Fetching RFC Destination based on System ID
+    SELECT SINGLE * FROM /rb1m/sd_i_rfcmap_basic INTO @DATA(ls_rfcmap)
+                       WHERE logsys EQ @lv_logsys.
+
+    IF sy-subrc IS INITIAL.
+      CALL FUNCTION 'RFC_CALLBACK_REJECTED'.
+      CALL FUNCTION 'RFC_PING' DESTINATION ls_rfcmap-rfcdest
+        EXCEPTIONS
+          system_failure        = 1
+          communication_failure = 2
+          OTHERS                = 99.
+      IF sy-subrc IS INITIAL.
+        rv_rfc_dest = ls_rfcmap-rfcdest.
+      ENDIF.
+    ENDIF.
+  endmethod.
+
+
+  METHOD /rb1m/if_sd_printout_util~submit_pdf2mail_prog.
+
+    DATA:
+      lr_unprocess   TYPE /rb1m/if_sd_printout_dataprovd=>tr_proc,
+      lo_message     TYPE REF TO /bobf/if_frw_message,
+      lt_messagetype TYPE /rb1m/cl_sd_printout_d_mpc=>tt_output,
+      lt_output      TYPE /rb1m/cl_sd_printout_d_mpc=>tt_output.
+
+    DATA : lr_codoc      TYPE /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~ty_r_codoc,
+           lr_fodoc      TYPE /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~ty_r_codoc,
+           lr_output     TYPE /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~ty_r_output,
+           lr_actiontype TYPE /rb1m/cl_sd_printout_util=>/rb1m/if_sd_printout_util~ty_r_actiontype.
+
+
+    CLEAR: lt_messagetype,lt_output,lr_unprocess,ev_subrc.
+
+    IF it_freightorder IS INITIAL.
+      ev_subrc  = 4.
+      RETURN.
+    ENDIF.
+*    get message type
+    lr_unprocess = VALUE #(
+                       ( sign = 'I'
+                         option = 'EQ'
+                         low = '1'" green status
+                       )
+                       ( sign = 'I'
+                         option = 'EQ'
+                         low = '0'" yellow status
+                       )
+                        ).
+
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_message_type_batch
+      EXPORTING
+        it_freightorder   = it_freightorder
+        ir_process        = lr_unprocess
+      IMPORTING
+        et_output_type    = lt_output
+        et_messagetype    = lt_messagetype              " get message type
+        ev_export_excel   = DATA(lv_export_excel)       " get export excel option
+        es_data2mail      = DATA(ls_data2mail).
+
+    IF lt_messagetype IS INITIAL.
+      ev_subrc  = 4.
+      RETURN.
+    ENDIF.
+*  Write logic for submit program
+    lr_fodoc =  VALUE #(   FOR ls_fo2fonav IN lt_output
+                           ( sign = 'I'
+                             option = 'EQ'
+                             low = ls_fo2fonav-freightorderdocument
+                            )
+                         ).
+    SORT lr_fodoc BY low.
+    DELETE ADJACENT DUPLICATES FROM lr_fodoc COMPARING low.
+
+    lr_codoc =  VALUE #( FOR ls_fo2conav IN it_freightorder
+                         ( sign = 'I'
+                           option = 'EQ'
+                           low = ls_fo2conav-codocument
+                          )
+                       ).
+    SORT lr_codoc BY low.
+    DELETE ADJACENT DUPLICATES FROM lr_codoc COMPARING low.
+
+    lr_output =   VALUE #( FOR ls_fo2output IN lt_messagetype
+                           WHERE ( messagetype IS NOT INITIAL )
+                            ( sign = 'I'
+                              option = 'EQ'
+                              low = ls_fo2output-messagetype
+                             )
+                       ).
+
+    lr_actiontype =   VALUE #( FOR ls_fo2actiontype IN lt_messagetype
+                                WHERE ( actiontype IS NOT INITIAL )
+                                ( sign = 'I'
+                                  option = 'EQ'
+                                  low = ls_fo2actiontype-actiontype
+                                 )
+                   ).
+
+*   Get body text of email
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_email_text_batch(
+      IMPORTING
+        et_text      = DATA(lt_text)
+        ev_mail_text = DATA(lv_mailtext)
+    ).
+
+    IF lv_mailtext  IS INITIAL.
+      ev_subrc  = 4.
+      RETURN.
+    ENDIF.
+*   Get Email Recipients.
+    DATA(lv_shipping_point) = VALUE #( it_freightorder[ 1 ]-shippingpoint OPTIONAL ).
+    DATA(lv_ship_to_party) =  VALUE #( it_freightorder[ 1 ]-shiptoparty OPTIONAL ).
+
+    CALL METHOD /rb1m/cl_sd_printout_dataprovd=>/rb1m/if_sd_printout_dataprovd~get_recipients_batch
+      EXPORTING
+        iv_shiptoparty      = lv_ship_to_party
+        iv_shippingpoint    = lv_shipping_point
+      IMPORTING
+        er_emailid          = DATA(lr_mailid).
+
+    IF lr_mailid[] IS INITIAL.
+      ev_subrc  = 4.
+      RETURN.
+    ENDIF.
+
+*   get not processed status
+    DATA(lv_processstatus_yellow) = abap_true.
+*   get processed status
+    DATA(lv_processstatus_green) = abap_true.
+
+* " run forceground  - Direct submit
+    SUBMIT /rb1m/sd_sh_printout_data2mail
+        WITH s_fo     IN lr_fodoc
+        WITH s_co     IN lr_codoc
+        WITH s_out_p  IN lr_output
+        WITH s_act_p  IN lr_actiontype
+        WITH p_excel  EQ lv_export_excel
+        WITH p_batch  EQ 'X'
+        WITH p_langu  EQ sy-langu
+        WITH p_inv    EQ ls_data2mail-directinvoice
+        WITH p_mlbinv EQ ls_data2mail-mlbinvoice
+        WITH p_proinv EQ ls_data2mail-proformadirectinvoice
+        WITH p_pminv  EQ ls_data2mail-proformamlbinvoice
+        WITH p_prcsg  EQ lv_processstatus_green
+        WITH p_prcsy  EQ lv_processstatus_yellow
+        WITH p_merge  EQ '01'
+        WITH p_text   EQ lv_mailtext
+        WITH s_mail   IN lr_mailid
+        AND RETURN.
+    IF sy-subrc IS NOT INITIAL.
+      ev_subrc = 2.
+    ELSE.
+      ev_subrc = 0.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD /rb1m/if_sd_printout_util~send_email_failure_case.
+    DATA: lv_title(20) TYPE c,
+          lv_text      TYPE soli_tab,
+          lv_text_html TYPE string.
+    DATA:
+      lo_document        TYPE REF TO cl_document_bcs,
+      lo_cx_document_bcs TYPE REF TO cx_document_bcs,
+      lo_send_request    TYPE REF TO cl_bcs,
+      lv_pdf_content_lfg TYPE solix_tab,
+      lv_email           TYPE adr6-smtp_addr,
+      lv_sent_to_all     TYPE os_boolean,
+      lo_recipient       TYPE REF TO if_recipient_bcs,
+      lo_exception       TYPE REF TO cx_send_req_bcs.
+    DATA: lv_subject  TYPE so_obj_des,
+          lv_subject2 TYPE string.
+
+    CONSTANTS:
+      lc_beginhtmltag TYPE char30 VALUE '<html> <body>',
+      lc_endhtmltag   TYPE char30 VALUE '</body> </html>'.
+
+    lv_title = TEXT-002 . " Bosch shipment
+*       Subject of Email
+    lv_subject = lv_title && | | && iv_codocument .
+*       Content of Email
+    lv_text_html = TEXT-016 && | | && iv_codocument && | | && TEXT-017 .
+    lv_text_html = lc_beginhtmltag && lv_text_html.
+    lv_text_html = lv_text_html && lc_endhtmltag.
+    lv_text = cl_bcs_convert=>string_to_soli( lv_text_html ).
+    TRY.
+
+        lo_document = cl_document_bcs=>create_document(
+            i_type      = 'HTM'
+            i_text      = lv_text
+            i_subject   = lv_subject ).
+      CATCH cx_document_bcs INTO lo_cx_document_bcs.
+    ENDTRY.
+    lo_send_request = cl_bcs=>create_persistent( ).
+    lv_subject2 = lv_subject.
+    lo_send_request->set_message_subject( ip_subject = lv_subject2 ).
+*    Email address....
+    TRY.
+
+        LOOP AT it_recipients INTO DATA(ls_recipient).
+          MOVE ls_recipient-line TO lv_email .
+          lo_recipient = cl_cam_address_bcs=>create_internet_address(
+             i_address_string = lv_email ).
+          lo_send_request->add_recipient( i_recipient = lo_recipient i_blind_copy = 'X' ).
+        ENDLOOP.
+      CATCH cx_address_bcs.
+
+    ENDTRY.
+    lo_send_request->set_document( lo_document ).
+    lv_sent_to_all = lo_send_request->send( i_with_error_screen = 'X' ).
+    COMMIT WORK.
+
+  ENDMETHOD.
+ENDCLASS.
