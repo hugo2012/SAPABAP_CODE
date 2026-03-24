@@ -821,5 +821,1352 @@ CLASS /rb1m/cl_sd_del_mass_fld_chngs IMPLEMENTATION.
 
   ENDMETHOD.
 ENDCLASS.
+// Behaviour definition 
+unmanaged implementation in class /rb1m/cl_sd_del_mass_change unique;
+
+define behavior for /RB1M/SD_C_DELIVERY_CHANGE_EWM
+lock master
+authorization master ( instance )
+{
+  update ( features : instance );
+  association _Text { create ( features : instance ); }
+  association _ItemText { create ( features : instance ); }
+
+  function default_for_cba_itemtext result [1] /RB1M/SD_C_DELIVERY_ITEM_TEXT;
+  function default_for_cba_headertext result [1] /RB1M/SD_C_DELIVERY_TEXT;
+
+  action ( features : instance ) cancel_delivery result [1] $self;
+
+  //To Make Field Read-Only while Update
+  field ( readonly : update ) Delivery, DeliveryItem, plant, ShipToParty,
+  WarehouseNo, GoodsMomStatus, ShippingPoint, WeightUnit, SalesUnit, GrossWeight;
+
+  field ( features : instance ) INCO1, INCO2, Quantity, ShippingType,
+  TransPlanDate, LoadingDate, DeliveryDate, ExtDelNote, CustMaterial;
+}
+
+define behavior for /RB1M/SD_C_DELIVERY_TEXT alias _Text
+lock dependent by _Delivery
+authorization dependent
+{
+  create;
+  update;
+  association _Delivery { }
+  field ( readonly : update ) Delivery, DeliveryItem, TextID, Language, tdtext, DeliveryDocumentType;
+  field ( mandatory : create ) DeliveryDocumentType, TextID, Language;
+}
+
+define behavior for /RB1M/SD_C_DELIVERY_ITEM_TEXT alias _ItemText
+lock dependent by _Delivery
+authorization dependent
+{
+  create;
+  update;
+  association _Delivery { }
+  field ( readonly : update ) Delivery, DeliveryItem, TextID, Language, tdtext;
+  field ( mandatory : create ) TextID, Language;
+}
+///rb1m/cl_sd_del_mass_change 
+CLASS /rb1m/cl_sd_del_mass_change DEFINITION PUBLIC ABSTRACT FINAL FOR BEHAVIOR OF /rb1m/sd_c_delivery_change_ewm.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_DEL_MASS_CHANGE IMPLEMENTATION.
+ENDCLASS.
+
+CLASS lhc__itemtext DEFINITION INHERITING FROM cl_abap_behavior_handler.
+
+  PRIVATE SECTION.
+
+    METHODS create FOR MODIFY
+      IMPORTING entities FOR CREATE _itemtext.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE _itemtext.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ _itemtext RESULT result.
+
+    METHODS rba_delivery FOR READ
+      IMPORTING keys_rba FOR READ _itemtext\_delivery FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc__itemtext IMPLEMENTATION.
+
+  METHOD create.
+  ENDMETHOD.
+
+  METHOD update.
+    DATA: lt_lines  TYPE tlinet,
+          ls_header TYPE thead,
+          lv_result TYPE char01.
+
+    LOOP AT entities ASSIGNING FIELD-SYMBOL(<ls_entity>).
+      IF <ls_entity>-%control-text = 01.
+        CLEAR lt_lines.
+        DATA(lv_text) = <ls_entity>-text.
+        REPLACE ALL OCCURRENCES OF '#' IN lv_text WITH cl_abap_char_utilities=>newline.
+        SPLIT <ls_entity>-text AT cl_abap_char_utilities=>newline INTO TABLE DATA(lt_texts) IN CHARACTER MODE.
+        ls_header-tdobject = <ls_entity>-textappobject.
+        ls_header-tdname   = <ls_entity>-textname.
+        ls_header-tdid     = <ls_entity>-textid.
+        ls_header-tdspras  = <ls_entity>-language.
+        lt_lines = VALUE #( FOR ls_text IN lt_texts ( tdformat = '*'
+                                                      tdline   = ls_text )  ).
+
+        CALL FUNCTION 'RFC_CALLBACK_REJECTED'.
+        CALL FUNCTION '/RB1M/SD_SAVE_TEXT' DESTINATION 'NONE'
+          EXPORTING
+            is_header = ls_header
+          IMPORTING
+            ev_result = lv_result
+          TABLES
+            ct_lines  = lt_lines.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_delivery.
+  ENDMETHOD.
+ENDCLASS.
+
+CLASS lhc__text DEFINITION INHERITING FROM cl_abap_behavior_handler.
+
+  PRIVATE SECTION.
+    METHODS create FOR MODIFY
+      IMPORTING entities FOR CREATE _text.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE _text.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ _text RESULT result.
+
+    METHODS rba_delivery FOR READ
+      IMPORTING keys_rba FOR READ _text\_delivery FULL result_requested RESULT result LINK association_links.
+
+ENDCLASS.
+
+CLASS lhc__text IMPLEMENTATION.
+  METHOD create.
+  ENDMETHOD.
+
+  METHOD update.
+    DATA: lt_lines  TYPE tlinet,
+          ls_header TYPE thead,
+          lt_texts  TYPE TABLE OF string,
+          lv_result TYPE char01.
+
+    LOOP AT entities ASSIGNING FIELD-SYMBOL(<ls_entity>).
+      IF <ls_entity>-%control-text = 01.
+        CLEAR lt_lines.
+        DATA(lv_text) = <ls_entity>-text.
+        REPLACE ALL OCCURRENCES OF '#' IN lv_text WITH cl_abap_char_utilities=>newline.
+        SPLIT <ls_entity>-text AT cl_abap_char_utilities=>newline INTO TABLE lt_texts IN CHARACTER MODE.
+        ls_header-tdobject = <ls_entity>-textappobject.
+        ls_header-tdname   = <ls_entity>-textname.
+        ls_header-tdid     = <ls_entity>-textid.
+        ls_header-tdspras  = <ls_entity>-language.
+
+        lt_lines = VALUE #( FOR ls_text IN lt_texts ( tdformat = '*'
+                                                      tdline   = ls_text )  ).
+
+        CALL FUNCTION 'RFC_CALLBACK_REJECTED'.
+        CALL FUNCTION '/RB1M/SD_SAVE_TEXT' DESTINATION 'NONE'
+          EXPORTING
+            is_header = ls_header
+          IMPORTING
+            ev_result = lv_result
+          TABLES
+            ct_lines  = lt_lines.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD read.
+  ENDMETHOD.
+
+  METHOD rba_delivery.
+  ENDMETHOD.
+  .
+ENDCLASS.
+
+CLASS lhc_sd_c_delivery_change_ewm DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR /rb1m/sd_c_delivery_change_ewm RESULT result.
+
+    METHODS update FOR MODIFY
+      IMPORTING entities FOR UPDATE /rb1m/sd_c_delivery_change_ewm.
+
+    METHODS read FOR READ
+      IMPORTING keys FOR READ /rb1m/sd_c_delivery_change_ewm RESULT result.
+
+    METHODS lock FOR LOCK
+      IMPORTING keys FOR LOCK /rb1m/sd_c_delivery_change_ewm.
+
+    METHODS rba_text FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_delivery_change_ewm\_text FULL result_requested RESULT result LINK association_links.
+
+    METHODS cba_text FOR MODIFY
+      IMPORTING entities_cba FOR CREATE /rb1m/sd_c_delivery_change_ewm\_text.
+
+    METHODS get_instance_features FOR INSTANCE FEATURES
+      IMPORTING keys REQUEST requested_features FOR /rb1m/sd_c_delivery_change_ewm RESULT result.
+
+    METHODS rba_itemtext FOR READ
+      IMPORTING keys_rba FOR READ /rb1m/sd_c_delivery_change_ewm\_itemtext FULL result_requested RESULT result LINK association_links.
+
+    METHODS cba_itemtext FOR MODIFY
+      IMPORTING entities_cba FOR CREATE /rb1m/sd_c_delivery_change_ewm\_itemtext.
+
+    METHODS default_for_cba_itemtext FOR READ
+      IMPORTING keys FOR FUNCTION /rb1m/sd_c_delivery_change_ewm~default_for_cba_itemtext RESULT result.
+
+    METHODS default_for_cba_headertext FOR READ
+      IMPORTING keys FOR FUNCTION /rb1m/sd_c_delivery_change_ewm~default_for_cba_headertext RESULT result.
+
+    METHODS cancel_delivery FOR MODIFY
+      IMPORTING keys FOR ACTION /rb1m/sd_c_delivery_change_ewm~cancel_delivery RESULT result.
+
+ENDCLASS.
+
+CLASS lhc_sd_c_delivery_change_ewm IMPLEMENTATION.
+
+  METHOD get_instance_authorizations.
+  ENDMETHOD.
+
+  METHOD update.
+    " --Local Data Declaration
+    DATA ls_header_data         TYPE bapiobdlvhdrchg.
+    DATA lv_timezone            TYPE timezone.
+    DATA ls_header_control      TYPE bapiobdlvhdrctrlchg.
+    DATA lt_header_dates        TYPE STANDARD TABLE OF bapidlvdeadln.
+    DATA lt_item_data           TYPE STANDARD TABLE OF bapiobdlvitemchg.
+    DATA lt_item_control        TYPE STANDARD TABLE OF bapiobdlvitemctrlchg.
+    DATA lt_return              TYPE STANDARD TABLE OF bapiret2.
+    DATA lt_extension           TYPE STANDARD TABLE OF bapiextc.
+    DATA ls_delivery_change_ewm TYPE /rb1m/sd_delivery_change_ewm.
+    DATA ls_chadela_temp        TYPE /rb1m/sd_chadela.
+
+    " --Initializing local variables
+    CLEAR: ls_header_data,
+           ls_header_control,
+           ls_chadela_temp,
+           lt_header_dates,
+           lt_item_data,
+           lt_item_control,
+           lt_return,
+           lt_extension,
+           ls_delivery_change_ewm.
+
+    DATA(lo_data_extractor) = NEW /rb1m/cl_sd_chadela_data_pro( ).
+    DATA(lo_data_process)   = NEW /rb1m/cl_sd_chadela_process( ).
+
+    DATA(ls_input) = VALUE #( entities[ 1 ] OPTIONAL ).
+    IF ls_input IS INITIAL.
+      RETURN.
+    ENDIF.
+    " ---------------------------------------------------------------------
+    "                     Q U E U E   C H E C K                           -
+    " ---------------------------------------------------------------------
+    DATA(lv_is_in_queue) = lo_data_process->check_queue(
+                                iv_delivery = ls_input-delivery ).
+    IF lv_is_in_queue IS NOT INITIAL.
+      APPEND VALUE #( %cid     = ls_input-%cid_ref
+                      delivery = ls_input-delivery
+                    ) TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+      APPEND VALUE #( %msg          = new_message(
+                                          id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                          number   = 011
+                                          severity = if_abap_behv_message=>severity-error
+                                          v1       = ls_input-delivery
+                                          )
+                      %key-delivery = ls_input-delivery
+                      %cid          = ls_input-%cid_ref
+                      %update       = if_abap_behv=>auth-unauthorized
+                      delivery      = ls_input-delivery
+                     ) TO reported-/rb1m/sd_c_delivery_change_ewm.
+      RETURN.
+    ENDIF.
+    " --Check if in the temporary table, delivery is exists
+    SELECT SINGLE @abap_true FROM /rb1m/sd_i_chadela_tmp
+                             INTO @DATA(lv_exists)
+                             WHERE delivery = @ls_input-delivery. "#EC CI_SUBRC
+    IF lv_exists = abap_true.
+      APPEND VALUE #( %cid     = ls_input-%cid_ref
+                      delivery = ls_input-delivery
+                    ) TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+      APPEND VALUE #( %msg          = new_message(
+                                          id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                          number   = 007
+                                          severity = if_abap_behv_message=>severity-error
+                                          v1       = ls_input-delivery
+                                          )
+                      %key-delivery = ls_input-delivery
+                      %cid          = ls_input-%cid_ref
+                      %update       = if_abap_behv=>auth-unauthorized
+                      delivery      = ls_input-delivery
+                     ) TO reported-/rb1m/sd_c_delivery_change_ewm.
+      RETURN.
+    ENDIF.
+    " ---------------------------------------------------------------------
+    "                     Q U E R Y   --  E R P                           -
+    " ---------------------------------------------------------------------
+    lo_data_extractor->read_delivery_header(
+                            EXPORTING iv_delivery        = ls_input-delivery
+                            IMPORTING es_delivery_header = DATA(ls_del_header) ).
+
+    lo_data_extractor->read_delivery_item(
+                            EXPORTING iv_delivery      = ls_input-delivery
+                                      iv_delivery_item = ls_input-deliveryitem
+                            IMPORTING es_delivery_item = DATA(ls_del_item) ).
+
+    " ---------------------------------------------------------------------
+    "                     Q U E R Y   --  E W M                           -
+    " ---------------------------------------------------------------------
+    lo_data_extractor->query(
+      EXPORTING
+        iv_delivery     = ls_input-delivery
+      IMPORTING
+        et_header       = DATA(lt_header)
+        et_items        = DATA(lt_items) ).
+
+    " ---------------------------------------------------------------------
+    "                     V A L I D A T I O N S                           -
+    " ---------------------------------------------------------------------
+    " 1.) Check before the change whether the corresponding EWM ODO is
+    "     available for the ERP Delivery
+    IF lt_header IS INITIAL.
+      APPEND VALUE #( %cid     = ls_input-%cid_ref
+                      delivery = ls_input-delivery )
+             TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+      APPEND VALUE #( %msg          = new_message( id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                                   number   = 003
+                                                   severity = if_abap_behv_message=>severity-error )
+                      %key-delivery = ls_input-delivery
+                      %cid          = ls_input-%cid_ref
+                      %update       = if_abap_behv=>auth-unauthorized
+                      delivery      = ls_input-delivery ) TO reported-/rb1m/sd_c_delivery_change_ewm.
+      RETURN.
+    ENDIF.
+
+    " 2.) Quantity Validation
+    IF ls_input-%control-quantity = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+
+      " 2.1) In case of KANBAN (delivery type YOLK) the quantity may only be
+      "      changed to 0, No other quantity changes should be allowed.
+      READ ENTITIES OF /rb1m/sd_c_delivery_change_ewm IN LOCAL MODE
+           ENTITY /rb1m/sd_c_delivery_change_ewm
+           ALL FIELDS WITH VALUE #( ( delivery     = ls_input-delivery
+                                      deliveryitem = ls_input-deliveryitem ) )
+           RESULT DATA(lt_result)
+           FAILED failed.
+
+      DATA(lv_deltype) = VALUE #( lt_result[ 1 ]-deliverytype OPTIONAL ).
+
+      IF lv_deltype = /rb1m/if_sd_chadela_constant=>gc_deltyp_kanban AND ls_input-quantity > 0.
+        APPEND VALUE #( %cid     = ls_input-%cid_ref
+                        delivery = ls_input-delivery )
+               TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+        APPEND VALUE #( %msg          = new_message( id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                                     number   = 002
+                                                     severity = if_abap_behv_message=>severity-error )
+                        %key-delivery = ls_input-delivery
+                        %cid          = ls_input-%cid_ref
+                        %update       = if_abap_behv=>auth-unauthorized
+                        delivery      = ls_input-delivery )
+               TO reported-/rb1m/sd_c_delivery_change_ewm.
+        RETURN.
+      ENDIF.
+**********************************************************************
+      " 2.2) Picking Status Check
+      "      If WH Task is not Exists and Status != 'Not Started'.
+      DATA(lv_picking_status) = lo_data_process->get_picking_status( iv_delivery      = ls_input-delivery
+                                                                     iv_delivery_item = ls_input-deliveryitem
+                                                                     it_items         = lt_items ).
+
+      CASE lv_picking_status.
+        WHEN '1'. "_Not Started
+          "_Any Changes also 0
+
+        WHEN '2'. "_Not Started
+          "_Any Changes also 0
+
+        WHEN OTHERS.
+          APPEND VALUE #( %cid     = ls_input-%cid_ref
+                          delivery = ls_input-delivery )
+                 TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+          APPEND VALUE #( %msg          = new_message( id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                                       number   = 001
+                                                       severity = if_abap_behv_message=>severity-error )
+                          %key-delivery = ls_input-delivery
+                          %cid          = ls_input-%cid_ref
+                          %update       = if_abap_behv=>auth-unauthorized
+                          delivery      = ls_input-delivery )
+                 TO reported-/rb1m/sd_c_delivery_change_ewm.
+          RETURN.
+      ENDCASE.
+**********************************************************************
+      " 2.3) Stock Check in ERP
+      DATA(ls_log) = lo_data_process->check_stock( iv_delivery      = ls_input-delivery
+                                                   iv_delivery_item = ls_input-deliveryitem
+                                                   iv_new_quantity  = ls_input-quantity
+                                                   iv_sales_unit    = ls_del_item-deliveryquantityunit
+                                                   iv_batch         = ls_del_item-batch ).
+
+      IF ls_log-msgty = /rb1m/if_sd_chadela_constant=>gc_error OR
+         ls_log-msgty = /rb1m/if_sd_chadela_constant=>gc_cancel.
+        APPEND VALUE #( %cid     = ls_input-%cid_ref
+                        delivery = ls_input-delivery )
+               TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+        APPEND VALUE #( %msg          = new_message( id       = ls_log-msgid
+                                                     number   = CONV #( ls_log-msgno )
+                                                     severity = if_abap_behv_message=>severity-error
+                                                     v1       = ls_log-msgv1
+                                                     v2       = ls_log-msgv2
+                                                     v3       = ls_log-msgv3
+                                                     v4       = ls_log-msgv4 )
+                        %key-delivery = ls_input-delivery
+                        %cid          = ls_input-%cid_ref
+                        %update       = if_abap_behv=>auth-unauthorized
+                        delivery      = ls_input-delivery )
+               TO reported-/rb1m/sd_c_delivery_change_ewm.
+        RETURN.
+      ENDIF.
+
+**********************************************************************
+      " 2.4) QM Concession Check
+      DATA(lo_operation) = NEW /rb4r/cl_qm_conces_operations( ).
+      DATA(lv_difference_qty) = CONV lfimg( ls_input-quantity - ls_del_item-actualdeliveryquantity ).
+      IF lv_difference_qty NE 0.
+        lo_operation->check_for_block(
+          EXPORTING
+            iv_matnr     = ls_del_item-material
+            iv_plant     = ls_del_item-plant
+            iv_kunnr     = ls_del_header-shiptoparty
+            iv_lifnr     = ls_del_header-supplier
+            iv_quan      = lv_difference_qty
+            iv_mon_type  = /rb1m/if_sd_chadela_constant=>gc_con_mon_type_ycsd
+            iv_doc_type  = lv_deltype
+            iv_call_from = /rb1m/if_sd_chadela_constant=>gc_chadela
+            iv_date      = sy-datum
+            iv_lock      = abap_true
+          IMPORTING
+            et_return    = DATA(lt_return1)
+            et_qm_conc   = DATA(lt_qm_conc) ).
+        IF lt_qm_conc IS NOT INITIAL.
+          DATA(lv_block) = VALUE #( lt_qm_conc[ 1 ]-block OPTIONAL ).
+
+          IF lv_block EQ /rb1m/if_sd_chadela_constant=>gc_error
+                            OR
+             line_exists( lt_return1[ type = /rb1m/if_sd_chadela_constant=>gc_error ] ).
+
+            APPEND VALUE #( %cid     = ls_input-%cid_ref
+                            delivery = ls_input-delivery )
+                   TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+            DATA(ls_return) = VALUE #( lt_return1[ 1 ] OPTIONAL ).
+
+            APPEND VALUE #( %msg          = new_message( id       = ls_return-id
+                                                         number   = ls_return-number
+                                                         severity = if_abap_behv_message=>severity-error
+                                                         v1       = ls_return-message_v1
+                                                         v2       = ls_return-message_v2
+                                                         v3       = ls_return-message_v3
+                                                         v4       = ls_return-message_v4 )
+                            %key-delivery = ls_input-delivery
+                            %cid          = ls_input-%cid_ref
+                            %update       = if_abap_behv=>auth-unauthorized
+                            delivery      = ls_input-delivery )
+                   TO reported-/rb1m/sd_c_delivery_change_ewm.
+            RETURN.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+**********************************************************************
+      " 2.5 ) Delivery Block Check
+      DATA(lo_db_monitor)  = NEW /rb4r/cl_qm_db_monitor( ).
+
+      CLEAR: lt_return1, lv_block.
+      IF lv_difference_qty NE 0.
+        lo_db_monitor->db_check_for_block(
+          EXPORTING
+            iv_matnr     = ls_del_item-material
+            iv_plant     = ls_del_item-plant
+            iv_kunnr     = ls_del_header-shiptoparty
+            iv_partner   = COND parvw( WHEN ls_del_header-shiptoparty EQ ''
+                                          THEN ''
+                                        ELSE /rb1m/if_sd_chadela_constant=>gc_sh )
+            iv_kunag     = ls_del_header-soldtoparty
+            iv_partner_g = COND parvw( WHEN ls_del_header-soldtoparty EQ ''
+                                          THEN ''
+                                        ELSE /rb1m/if_sd_chadela_constant=>gc_sp )
+            iv_batch     = ls_del_item-batch
+            iv_quan      = lv_difference_qty
+            iv_uom       = ls_del_item-baseunit
+            iv_doc_type  = lv_deltype
+            iv_call_from = /rb1m/if_sd_chadela_constant=>gc_chadela
+            iv_date      = sy-datum
+          IMPORTING
+            et_return    = lt_return1
+            ev_block     = lv_block ).
+        IF lt_return1 IS NOT INITIAL.
+          TRY.
+              ls_return = VALUE #( lt_return1[ type = /rb1m/if_sd_chadela_constant=>gc_error  ] ).
+
+              APPEND VALUE #( %cid     = ls_input-%cid_ref
+                              delivery = ls_input-delivery )
+                     TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+              APPEND VALUE #( %msg          = new_message( id       = ls_return-id
+                                                           number   = ls_return-number
+                                                           severity = if_abap_behv_message=>severity-error
+                                                           v1       = ls_return-message_v1
+                                                           v2       = ls_return-message_v2
+                                                           v3       = ls_return-message_v3
+                                                           v4       = ls_return-message_v4 )
+                              %key-delivery = ls_input-delivery
+                              %cid          = ls_input-%cid_ref
+                              %update       = if_abap_behv=>auth-unauthorized
+                              delivery      = ls_input-delivery )
+                     TO reported-/rb1m/sd_c_delivery_change_ewm.
+              RETURN.
+            CATCH cx_sy_itab_line_not_found.
+              CLEAR ls_return.
+          ENDTRY.
+        ENDIF.
+      ENDIF.
+**********************************************************************
+    ENDIF.
+
+    "" System should not allow to change delivery date or loading date along with quantity
+    IF  ( ls_input-%control-quantity = /rb1m/if_sd_chadela_constant=>gc_is_changed
+      AND ls_input-%control-loadingtimestamp = /rb1m/if_sd_chadela_constant=>gc_is_changed )
+      OR ( ls_input-%control-deliverytimestamp = /rb1m/if_sd_chadela_constant=>gc_is_changed
+      AND ls_input-%control-quantity = /rb1m/if_sd_chadela_constant=>gc_is_changed ).
+
+      APPEND VALUE #( %cid     = ls_input-%cid_ref
+                      delivery = ls_input-delivery
+                    ) TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+      APPEND VALUE #( %msg          = new_message(
+                                          id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                          number   = 010
+                                          severity = if_abap_behv_message=>severity-error
+                                          v1       = ls_input-delivery
+                                          )
+                      %key-delivery = ls_input-delivery
+                      %cid          = ls_input-%cid_ref
+                      %update       = if_abap_behv=>auth-unauthorized
+                      delivery      = ls_input-delivery
+                     ) TO reported-/rb1m/sd_c_delivery_change_ewm.
+      RETURN.
+    ENDIF.
+
+    " ---------------------------------------------------------------------
+    " F I L L   B A P I   H E A D E R                                     -
+    " ---------------------------------------------------------------------
+    ls_header_data-deliv_numb    = ls_input-delivery.
+    ls_header_control-deliv_numb = ls_input-delivery.
+
+    " --INCO1
+    IF ls_input-%control-inco1 = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+      ls_header_data-incoterms1   = ls_input-inco1.
+      ls_header_control-inco1_flg = abap_true.
+      ls_chadela_temp-inco1       = ls_input-inco1.
+      ls_chadela_temp-inco1x      = abap_true.
+    ENDIF.
+
+    " --INCO2
+    "Determine INCO2 incase of not done.
+    IF ls_input-%control-inco1  = /rb1m/if_sd_chadela_constant=>gc_is_changed AND
+       ls_input-%control-inco2 <> /rb1m/if_sd_chadela_constant=>gc_is_changed.
+      DATA(lv_inco2_d) = NEW /rb1m/cl_sd_inco_utilities( )->get_inco2_value(
+                                                           iv_inco1  = ls_input-inco1
+                                                           iv_vstel  = ls_del_header-shippingpoint
+                                                           iv_kunnr  = ls_del_header-shiptoparty ).
+      IF lv_inco2_d IS NOT INITIAL AND ls_del_header-incotermstransferlocation <> lv_inco2_d.
+        DATA(lv_inco2_chg) = abap_true.
+        ls_input-inco2 = lv_inco2_d.
+      ENDIF.
+    ENDIF.
+    "Update INCO2
+    IF ls_input-%control-inco2 = /rb1m/if_sd_chadela_constant=>gc_is_changed
+    OR lv_inco2_chg = abap_true.
+      ls_header_data-incoterms2   = ls_input-inco2.
+      ls_header_control-inco2_flg = abap_true.
+      ls_chadela_temp-inco2       = ls_input-inco2.
+      ls_chadela_temp-inco2x      = abap_true.
+    ENDIF.
+
+    " --Header Gross Weight
+    IF ls_input-%control-grossweight = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+      ls_header_data-gross_wt   = ls_input-grossweight.
+      ls_header_data-unit_of_wt = ls_input-weightunit.
+      ls_header_control-gross_wt_flg = abap_true.
+    ENDIF.
+
+    " ---------------------------------------------------------------------
+    " F I L L   B A P I   H E A D E R   D A T E S                         -
+    " ---------------------------------------------------------------------
+    " --Get Time Zone
+    CALL FUNCTION 'GET_SYSTEM_TIMEZONE'
+      IMPORTING
+        timezone            = lv_timezone
+      EXCEPTIONS
+        customizing_missing = 1
+        OTHERS              = 2.
+    IF sy-subrc <> 0.
+      CLEAR lv_timezone.
+    ENDIF.
+**
+**------------------------------------------------------------------------------------------------------
+    "" Read screen data to get changed date and timezone
+    READ ENTITIES OF /rb1m/sd_c_delivery_change_ewm IN LOCAL MODE
+         ENTITY /rb1m/sd_c_delivery_change_ewm
+         ALL FIELDS WITH VALUE #( ( delivery     = ls_input-delivery
+                                    deliveryitem = ls_input-deliveryitem ) )
+         RESULT lt_result
+         FAILED failed.
+    READ TABLE lt_result INTO DATA(ls_result) WITH KEY delivery     = ls_input-delivery
+                                                       deliveryitem = ls_input-deliveryitem.
+    IF sy-subrc = 0.
+*    " --Transportation Planning TimeStamp
+      IF ls_input-%control-transplantimestamp = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+
+        APPEND VALUE #( deliv_numb    = ls_input-delivery
+                        timetype      = 'WSHDRTDDAT'
+                        timestamp_utc = ls_input-transplantimestamp
+                        timezone      = ls_result-delloctzone ) TO lt_header_dates.
+        ls_chadela_temp-transplandatetime  = ls_input-transplantimestamp.
+        ls_chadela_temp-transplandatex = abap_true.
+        ls_chadela_temp-delloctzone = ls_result-delloctzone.
+      ENDIF.
+
+*    " --Loading TimeStamp
+      IF ls_input-%control-loadingtimestamp = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+
+        APPEND VALUE #( deliv_numb    = ls_input-delivery
+                        timetype      = 'WSHDRLDDAT'
+                        timestamp_utc = ls_input-loadingtimestamp
+                        timezone      = ls_result-delloctzone ) TO lt_header_dates.
+        APPEND VALUE #( deliv_numb    = ls_input-delivery
+                        timetype      = 'WSHDRWADAT'
+                        timestamp_utc = ls_input-loadingtimestamp
+                        timezone      = ls_result-delloctzone ) TO lt_header_dates.
+        ls_chadela_temp-loadingdatetime  = ls_input-loadingtimestamp.
+        ls_chadela_temp-loadingdatex     = abap_true.
+        ls_chadela_temp-plannedgidatetime = ls_input-loadingtimestamp.
+        ls_chadela_temp-plannedgix       = abap_true.
+        ls_chadela_temp-delloctzone = ls_result-delloctzone.
+      ENDIF.
+
+*    " --Delivery TimeStamp
+      IF ls_input-%control-deliverytimestamp = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+
+        APPEND VALUE #( deliv_numb    = ls_input-delivery
+                        timetype      = 'WSHDRLFDAT'
+                        timestamp_utc = ls_input-deliverytimestamp
+                        timezone      = ls_result-rectimezone ) TO lt_header_dates.
+        ls_chadela_temp-deliverydatetime  = ls_input-deliverytimestamp.
+        ls_chadela_temp-deliverydatex     = abap_true.
+        ls_chadela_temp-rectimezone       = ls_result-rectimezone.
+      ENDIF.
+    ENDIF.
+
+    " ---------------------------------------------------------------------
+    " M O D E   O F   T R A N S P O R T                  -
+    " ---------------------------------------------------------------------
+
+*          ls_input-%control-motinland    = /rb1m/if_sd_chadela_constant=>gc_is_changed
+*       OR ls_input-%control-motintrastat = /rb1m/if_sd_chadela_constant=>gc_is_changed
+*       OR ls_input-%control-motborder    = /rb1m/if_sd_chadela_constant=>gc_is_changed
+    IF ls_input-%control-extdelnote   = /rb1m/if_sd_chadela_constant=>gc_is_changed
+    OR ls_input-%control-shippingtype = /rb1m/if_sd_chadela_constant=>gc_is_changed
+    OR ls_input-%control-custmaterial = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+      ls_delivery_change_ewm-vbeln     = ls_input-delivery.
+      ls_delivery_change_ewm-posnr     = ls_input-deliveryitem.
+*      ls_delivery_change_ewm-itm_iever = ls_input-motinland.
+*      ls_delivery_change_ewm-gts_expvz = ls_input-motintrastat.
+*      ls_delivery_change_ewm-itm_expvz = ls_input-motborder.
+
+      IF ls_input-%control-extdelnote   = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+        ls_delivery_change_ewm-lifex  = ls_input-extdelnote.
+        ls_delivery_change_ewm-lifexx = abap_true.
+        ls_chadela_temp-extdelnote    = ls_input-extdelnote.
+        ls_chadela_temp-extdelnotex   = abap_true.
+      ENDIF.
+      IF ls_input-%control-shippingtype = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+        ls_delivery_change_ewm-vsart  = ls_input-shippingtype.
+        ls_delivery_change_ewm-vsartx = abap_true.
+        ls_chadela_temp-shippingtype  = ls_input-shippingtype.
+        ls_chadela_temp-shippingtypex = abap_true.
+      ENDIF.
+      IF ls_input-%control-custmaterial = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+        ls_delivery_change_ewm-kdmat  = ls_input-custmaterial.
+        ls_delivery_change_ewm-kdmatx = abap_true.
+        ls_chadela_temp-custmaterial  = ls_input-custmaterial.
+        ls_chadela_temp-custmaterialx = abap_true.
+      ENDIF.
+      APPEND VALUE #( field1 = ls_delivery_change_ewm ) TO lt_extension.
+    ENDIF.
+    " ---------------------------------------------------------------------
+    " F I L L   B A P I    I T E M                                        -
+    " ---------------------------------------------------------------------
+    IF ls_input-%control-quantity = /rb1m/if_sd_chadela_constant=>gc_is_changed.
+      APPEND VALUE #( deliv_numb      = ls_input-delivery
+                      deliv_item      = ls_input-deliveryitem
+                      dlv_qty         = ls_input-quantity
+                      fact_unit_nom   = ls_del_item-deliverytobasequantitynmrtr
+                      fact_unit_denom = ls_del_item-deliverytobasequantitydnmntr
+                      conv_fact       = ls_del_item-deliverytobaseunitcnvrsnfctr
+                      sales_unit      = ls_del_item-deliveryquantityunit )
+             TO lt_item_data[].
+
+      APPEND VALUE #( deliv_numb = ls_input-delivery
+                      deliv_item = ls_input-deliveryitem
+                      chg_delqty = abap_true )
+             TO lt_item_control[].
+      ls_chadela_temp-quantityx = abap_true.
+    ENDIF.
+
+    " ---------------------------------------------------------------------
+    "           U P D A T E   T E M P R O R A R Y   T A B L E             -
+    " ---------------------------------------------------------------------
+    IF ls_chadela_temp IS NOT INITIAL.
+      ls_chadela_temp-delivery  = ls_input-delivery.
+      ls_chadela_temp-item      = ls_input-deliveryitem.
+    ENDIF.
+    " ---------------------------------------------------------------------
+    " C A L L   B A P I                                                   -
+    " ---------------------------------------------------------------------
+    CALL FUNCTION 'RFC_CALLBACK_REJECTED'.
+    CALL FUNCTION '/RB1M/SD_CALL_BAPI_DEL_CHANGE' DESTINATION 'NONE'
+      EXPORTING
+        is_header_data      = ls_header_data
+        is_header_control   = ls_header_control
+        iv_delivery         = ls_input-delivery
+        is_chadela_temp     = ls_chadela_temp
+      TABLES
+        it_header_deadlines = lt_header_dates
+        it_item_data        = lt_item_data
+        it_item_control     = lt_item_control
+        it_extension        = lt_extension
+        et_return           = lt_return.
+    IF line_exists( lt_return[ type = /rb1m/if_sd_chadela_constant=>gc_error ] ).
+      LOOP AT lt_return ASSIGNING FIELD-SYMBOL(<ls_return>).
+        APPEND VALUE #( %cid     = ls_input-%cid_ref
+                        delivery = ls_input-delivery )
+               TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+        APPEND VALUE #( %msg          = new_message( id       = <ls_return>-id
+                                                     number   = <ls_return>-number
+                                                     v1       = <ls_return>-message_v1
+                                                     v2       = <ls_return>-message_v2
+                                                     v3       = <ls_return>-message_v3
+                                                     v4       = <ls_return>-message_v4
+                                                     severity = if_abap_behv_message=>severity-error )
+                        %key-delivery = ls_input-delivery
+                        %cid          = ls_input-%cid_ref
+                        %update       = if_abap_behv=>auth-unauthorized
+                        delivery      = ls_input-delivery )
+               TO reported-/rb1m/sd_c_delivery_change_ewm.
+      ENDLOOP.
+    ELSEIF line_exists( lt_return[ type = /rb1m/if_sd_chadela_constant=>gc_warning ] ).
+      LOOP AT lt_return ASSIGNING <ls_return>.
+        APPEND VALUE #( %msg          = new_message( id       = <ls_return>-id
+                                                     number   = <ls_return>-number
+                                                     v1       = <ls_return>-message_v1
+                                                     v2       = <ls_return>-message_v2
+                                                     v3       = <ls_return>-message_v3
+                                                     v4       = <ls_return>-message_v4
+                                                     severity = if_abap_behv_message=>severity-information )
+                        %key-delivery = ls_input-delivery
+                        %cid          = ls_input-%cid_ref
+                        %update       = if_abap_behv=>auth-allowed
+                        delivery      = ls_input-delivery )
+               TO reported-/rb1m/sd_c_delivery_change_ewm.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD read.
+    DATA(lo_data_extractor) = NEW /rb1m/cl_sd_chadela_data_pro( ).
+
+    IF keys IS NOT INITIAL.
+      DATA(ls_key) = VALUE #( keys[ 1 ] OPTIONAL ).
+      lo_data_extractor->read_delivery_details(
+          EXPORTING
+              it_range_delivery     = VALUE #( ( sign = /rb1m/if_sd_chadela_constant=>gc_sign_i option = /rb1m/if_sd_chadela_constant=>gc_option_eq low = ls_key-delivery ) )
+              it_range_deliveryitem = VALUE #( ( sign = /rb1m/if_sd_chadela_constant=>gc_sign_i option = /rb1m/if_sd_chadela_constant=>gc_option_eq low = ls_key-deliveryitem ) )
+          IMPORTING
+              et_delivery_data      = DATA(lt_delivery_data) ).
+      result = CORRESPONDING #( lt_delivery_data ).
+
+      "-Inco1 text
+      IF lt_delivery_data IS NOT INITIAL.
+        ASSIGN lt_delivery_data[ 1 ] TO FIELD-SYMBOL(<ls_del>).
+
+        SELECT SINGLE incotermsclassificationname
+                FROM i_incotermsclassificationtext
+                WHERE incotermsclassification = @<ls_del>-inco1 AND language = @sy-langu
+                INTO @<ls_del>-incotermsclassificationname. "#EC CI_SUBRC
+      ENDIF.
+      result = CORRESPONDING #( lt_delivery_data ).
+
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD lock.
+
+  ENDMETHOD.
+
+  METHOD rba_text.
+  ENDMETHOD.
+
+  METHOD cba_text.
+    DATA lt_lines  TYPE tlinet.
+    DATA lv_result TYPE flag.
+
+    DATA(ls_entity) = VALUE #( entities_cba[ 1 ]-%target[ 1 ] OPTIONAL ).
+    DATA(ls_key)    = VALUE #( entities_cba[ 1 ] OPTIONAL ).
+
+    DATA(lv_text) = ls_entity-text.
+    REPLACE ALL OCCURRENCES OF '#' IN lv_text WITH cl_abap_char_utilities=>newline.
+    SPLIT ls_entity-text AT cl_abap_char_utilities=>newline INTO TABLE DATA(lt_texts) IN CHARACTER MODE.
+    lt_lines = VALUE #( FOR ls_text IN lt_texts
+                        ( tdformat = '*'
+                          tdline   = ls_text )  ).
+
+    CALL FUNCTION 'RFC_CALLBACK_REJECTED'.
+    CALL FUNCTION '/RB1M/SD_CREATE_TEXT' DESTINATION 'NONE'
+      EXPORTING
+        is_header = VALUE thead( tdid     = ls_entity-textid
+                                 tdspras  = ls_entity-language
+                                 tdname   = ls_key-delivery
+                                 tdobject = /rb1m/if_sd_chadela_constant=>gc_textobjectcategory_vbbk )
+      IMPORTING
+        ev_result = lv_result
+      TABLES
+        ct_lines  = lt_lines.
+
+    IF lv_result IS INITIAL.
+      INSERT VALUE #( %cid          = ls_entity-%cid
+                      delivery      = ls_key-delivery
+                      deliveryitem  = ls_key-deliveryitem
+                      textname      = ls_key-delivery
+                      textappobject = /rb1m/if_sd_chadela_constant=>gc_textobjectcategory_vbbk
+                      textid        = ls_entity-textid
+                      language      = ls_entity-language )
+             INTO TABLE mapped-_text.
+    ELSE.
+      INSERT VALUE #( %cid         = ls_entity-%cid
+                      delivery     = ls_entity-delivery
+                      deliveryitem = ls_entity-deliveryitem ) INTO TABLE failed-_text.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD get_instance_features.
+    DATA(lo_data_process) = NEW /rb1m/cl_sd_chadela_process( ).
+
+    READ ENTITIES OF /rb1m/sd_c_delivery_change_ewm IN LOCAL MODE
+         ENTITY /rb1m/sd_c_delivery_change_ewm
+         FIELDS ( delivery deliveryitem ) WITH CORRESPONDING #( keys )
+         RESULT DATA(lt_result)
+         FAILED failed.
+    IF lt_result IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    LOOP AT keys INTO DATA(key).
+      APPEND INITIAL LINE TO result ASSIGNING FIELD-SYMBOL(<ls_result>).
+      IF <ls_result> IS ASSIGNED.
+        <ls_result>-delivery     = key-delivery.
+        <ls_result>-deliveryitem = key-deliveryitem.
+
+        DATA(ls_result) = VALUE #( lt_result[ delivery     = key-delivery
+                                              deliveryitem = key-deliveryitem ] OPTIONAL ).
+
+        " --Making the Edit field Visible/Invisible
+        <ls_result>-%update = COND #( WHEN ls_result-goodsmomstatus      = /rb1m/if_sd_chadela_constant=>gc_dlv_goods_mvmnt_c
+                                        OR ls_result-distributionstatus IS INITIAL
+                                      THEN if_abap_behv=>fc-o-disabled
+                                      ELSE if_abap_behv=>fc-o-enabled ).
+
+        " --Making Association Action Button Visible/Invisible
+        IF <ls_result>-%update = if_abap_behv=>fc-o-disabled.
+          <ls_result>-%assoc-_text     = if_abap_behv=>fc-o-disabled.
+          <ls_result>-%assoc-_itemtext = if_abap_behv=>fc-o-disabled.
+        ENDIF.
+
+        IF lines( keys ) = 1.
+
+          lo_data_process->get_ewm_tm_status( EXPORTING iv_delivery             = key-delivery
+                                                        iv_delivery_item        = key-deliveryitem
+                                              IMPORTING ev_warehousetask_exists = DATA(lv_warehousetask_exists)
+                                                        ev_pickingstatus        = DATA(lv_pickingstatus)
+                                                        es_root_node            = DATA(ls_root_node)
+                                                        es_item                 = DATA(ls_item) ).
+
+          " --Updating EWM Quantity & UOM
+          ls_result-quantity  = ls_item-qty-qty.
+          ls_result-salesunit = ls_item-qty-uom.
+
+          " --Making the field Read-Only: FU is assigned to a CO
+          IF ls_root_node-plan_status_root = 02 OR ls_root_node-plan_status_root = 03.
+            <ls_result>-%field-inco1         = if_abap_behv=>fc-f-read_only.
+            <ls_result>-%field-inco2         = if_abap_behv=>fc-f-read_only.
+            <ls_result>-%field-shippingtype  = if_abap_behv=>fc-f-read_only.
+*            <ls_result>-%field-pickingdate   = if_abap_behv=>fc-f-read_only. "--OEDEV - 7090 : to hide in the meantime
+            <ls_result>-%field-transplandate = if_abap_behv=>fc-f-read_only.
+            <ls_result>-%field-deliverydate  = if_abap_behv=>fc-f-read_only.
+*            <ls_result>-%field-plannedgi     = if_abap_behv=>fc-f-read_only. "--OEDEV - 7090 : to hide in the meantime
+            <ls_result>-%field-loadingdate   = if_abap_behv=>fc-f-read_only.
+            <ls_result>-%field-extdelnote    = if_abap_behv=>fc-f-read_only.
+            <ls_result>-%field-custmaterial  = if_abap_behv=>fc-f-read_only.
+          ENDIF.
+
+**-- OEDEV - 7090 : to hide in the meantime
+          " --Making the field Read-Only: GI Posted
+*          IF ls_root_node-dlv_goods_mvmnt = /rb1m/if_sd_chadela_constant=>gc_dlv_goods_mvmnt_c.
+*            <ls_result>-%field-motborder    = if_abap_behv=>fc-f-read_only.
+*            <ls_result>-%field-motintrastat = if_abap_behv=>fc-f-read_only.
+*            <ls_result>-%field-motinland    = if_abap_behv=>fc-f-read_only.
+*          ENDIF.
+
+          " --Making the field Read-Only: Open Warehouse Task is already exist.
+          IF    lv_warehousetask_exists IS NOT INITIAL
+             OR ls_result-quantity       = 0
+             OR ( lv_pickingstatus IS NOT INITIAL AND lv_pickingstatus <> 1 AND lv_pickingstatus <> 2 ).
+            <ls_result>-%field-quantity = if_abap_behv=>fc-f-read_only.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+      UNASSIGN <ls_result>.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD rba_itemtext.
+  ENDMETHOD.
+
+  METHOD cba_itemtext.
+    DATA lt_lines  TYPE tlinet.
+    DATA lv_result TYPE flag.
+
+    DATA(ls_entity) = VALUE #( entities_cba[ 1 ]-%target[ 1 ] OPTIONAL ).
+    DATA(ls_key)    = VALUE #( entities_cba[ 1 ] OPTIONAL ).
+    DATA(lv_text) = ls_entity-text.
+    REPLACE ALL OCCURRENCES OF '#' IN lv_text WITH cl_abap_char_utilities=>newline.
+    SPLIT ls_entity-text AT cl_abap_char_utilities=>newline INTO TABLE DATA(lt_texts) IN CHARACTER MODE.
+    lt_lines = VALUE #( FOR ls_text IN lt_texts
+                        ( tdformat = '*'
+                          tdline   = ls_text )  ).
+
+    CALL FUNCTION 'RFC_CALLBACK_REJECTED'.
+    CALL FUNCTION '/RB1M/SD_CREATE_TEXT' DESTINATION 'NONE'
+      EXPORTING
+        is_header = VALUE thead( tdid     = ls_entity-textid
+                                 tdspras  = ls_entity-language
+                                 tdname   = |{ ls_key-delivery }| & |{ ls_key-deliveryitem }|
+                                 tdobject = /rb1m/if_sd_chadela_constant=>gc_textobjectcategory_vbbp )
+      IMPORTING
+        ev_result = lv_result
+      TABLES
+        ct_lines  = lt_lines.
+
+    IF lv_result IS INITIAL.
+      INSERT VALUE #( %cid          = ls_entity-%cid
+                      delivery      = ls_key-delivery
+                      deliveryitem  = ls_key-deliveryitem
+                      textname      = |{ ls_key-delivery }| & |{ ls_key-deliveryitem }|
+                      textappobject = /rb1m/if_sd_chadela_constant=>gc_textobjectcategory_vbbp
+                      textid        = ls_entity-textid
+                      language      = ls_entity-language )
+             INTO TABLE mapped-_itemtext.
+    ELSE.
+      INSERT VALUE #( %cid         = ls_entity-%cid
+                      delivery     = ls_entity-delivery
+                      deliveryitem = ls_entity-deliveryitem ) INTO TABLE failed-_itemtext.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD default_for_cba_itemtext.
+    " --Local Data Declaration
+    DATA: lt_item_text TYPE TABLE FOR READ RESULT /rb1m/sd_c_delivery_item_text.
+    TRY.
+        DATA(ls_key) = keys[ 1 ].
+
+        DATA(lo_data_extractor) = NEW /rb1m/cl_sd_chadela_data_pro( ).
+        DATA(lv_doccat) = lo_data_extractor->read_item_category(
+                            EXPORTING iv_delivery      = ls_key-delivery
+                                      iv_delivery_item = ls_key-deliveryitem ).
+        IF lv_doccat IS NOT INITIAL.
+          APPEND INITIAL LINE TO lt_item_text ASSIGNING FIELD-SYMBOL(<ls_itemtext>).
+          IF <ls_itemtext> IS ASSIGNED.
+            <ls_itemtext>-delitemcategory = lv_doccat.
+
+            result = VALUE #( delivery     = ls_key-delivery
+                              deliveryitem = ls_key-deliveryitem
+                              ( %param     = CORRESPONDING #( <ls_itemtext> ) ) ).
+          ENDIF.
+        ENDIF.
+      CATCH cx_sy_itab_line_not_found.
+    ENDTRY.
+
+  ENDMETHOD.
+
+  METHOD default_for_cba_headertext.
+    " --Local Data Declaration
+    DATA: lt_text TYPE TABLE FOR READ RESULT /rb1m/sd_c_delivery_text.
+
+    TRY.
+        DATA(ls_key) = keys[ 1 ].
+        DATA(lo_data_extractor) = NEW /rb1m/cl_sd_chadela_data_pro( ).
+        DATA(lv_doctyp) = lo_data_extractor->read_document_type( ls_key-delivery ).
+        IF lv_doctyp IS NOT INITIAL.
+          APPEND INITIAL LINE TO lt_text ASSIGNING FIELD-SYMBOL(<ls_text>).
+          IF <ls_text> IS ASSIGNED.
+            <ls_text>-deliverydocumenttype = lv_doctyp.
+
+            result = VALUE #( delivery     = ls_key-delivery
+                              deliveryitem = ls_key-deliveryitem
+                              ( %param     = CORRESPONDING #( <ls_text> ) ) ).
+          ENDIF.
+        ENDIF.
+      CATCH cx_sy_itab_line_not_found.
+    ENDTRY.
+  ENDMETHOD.
+  " ---------------------------------------------------------------------
+  "                 C A N C E L   D E L I V E R Y                       -
+  " ---------------------------------------------------------------------
+  METHOD cancel_delivery.
+    " --Local Data Declaration
+    DATA ls_header_data    TYPE bapiobdlvhdrchg.
+    DATA ls_header_control TYPE bapiobdlvhdrctrlchg.
+    DATA lt_item_data      TYPE STANDARD TABLE OF bapiobdlvitemchg.
+    DATA lt_item_control   TYPE STANDARD TABLE OF bapiobdlvitemctrlchg.
+    DATA lt_return         TYPE STANDARD TABLE OF bapiret2.
+
+    DATA(lo_data_extractor) = NEW /rb1m/cl_sd_chadela_data_pro( ).
+    DATA(lo_process)        = NEW /rb1m/cl_sd_chadela_process( ).
+
+    DATA(ls_key) = VALUE #( keys[ 1 ] OPTIONAL ).
+
+    " --Read data for action result
+    READ ENTITIES OF /rb1m/sd_c_delivery_change_ewm IN LOCAL MODE
+         ENTITY /rb1m/sd_c_delivery_change_ewm
+         ALL FIELDS WITH
+         CORRESPONDING #( keys )
+         RESULT DATA(lt_data).
+
+    result = VALUE #( FOR ls_data IN lt_data ( %tky   = ls_data-%tky
+                                               %param = ls_data ) ).
+
+    "-- Get All the items
+    lo_data_extractor->read_delivery_details(
+      EXPORTING it_range_delivery = VALUE #( ( sign   = /rb1m/if_sd_chadela_constant=>gc_sign_i
+                                               option = /rb1m/if_sd_chadela_constant=>gc_option_eq
+                                               low    = ls_key-delivery ) )
+      IMPORTING et_delivery_data  = DATA(lt_delivery_data) ).
+
+    lo_data_extractor->read_delivery_header(
+                            EXPORTING iv_delivery        = ls_key-delivery
+                            IMPORTING es_delivery_header = DATA(ls_del_header) ).
+
+    lo_data_extractor->read_delivery_item(
+                            EXPORTING iv_delivery      = ls_key-delivery
+                                      iv_delivery_item = ls_key-deliveryitem
+                            IMPORTING es_delivery_item = DATA(ls_del_item) ).
+
+    "-- EWM Query Method
+    lo_data_extractor->query(
+      EXPORTING iv_delivery     = ls_key-delivery
+      IMPORTING ev_warehouse_no = DATA(lv_warehouse_no)
+                et_header       = DATA(lt_header)
+                et_items        = DATA(lt_items) ).
+
+**********************************************************************
+*              QM Concession / Delivery Block Validations            *
+**********************************************************************
+    "-- Reading Quantity from EWM
+    LOOP AT lt_items ASSIGNING FIELD-SYMBOL(<ls_item>).
+      IF line_exists( <ls_item>-refdoc[ refdoccat = /rb1m/if_sd_chadela_constant=>gc_ref_doc_erp
+                                        refdocno  = ls_key-delivery
+                                        refitemno = ls_key-deliveryitem ] ).
+
+        DATA(ls_item) = <ls_item>.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+    UNASSIGN <ls_item>.
+
+    DATA(ls_delivery) = VALUE #( lt_data[ 1 ] OPTIONAL ).
+
+    DATA(lv_difference_qty) =  CONV lfimg( 0 - ls_item-qty-qty ).
+**********************************************************************
+    "-- QM Concession Validation
+**********************************************************************
+    DATA(lo_operation) = NEW /rb4r/cl_qm_conces_operations( ).
+    lo_operation->check_for_block(
+      EXPORTING
+        iv_matnr     = ls_delivery-material
+        iv_plant     = ls_delivery-plant
+        iv_kunnr     = ls_del_header-shiptoparty
+        iv_lifnr     = ls_del_header-supplier
+        iv_quan      = lv_difference_qty
+        iv_uom       = ls_item-qty-uom
+        iv_mon_type  = /rb1m/if_sd_chadela_constant=>gc_con_mon_type_ycsd
+        iv_doc_type  = ls_delivery-deliverytype
+        iv_call_from = /rb1m/if_sd_chadela_constant=>gc_chadela
+        iv_date      = sy-datum
+        iv_lock      = abap_true
+      IMPORTING
+        et_return    = lt_return
+        et_qm_conc   = DATA(lt_qm_conc) ).
+    IF line_exists( lt_return[ type = /rb1m/if_sd_chadela_constant=>gc_error ] ).
+      APPEND VALUE #( %cid         = ls_key-%cid_ref
+                      delivery     = ls_key-delivery
+                      deliveryitem = ls_key-deliveryitem
+                      %update      = if_abap_behv=>auth-unauthorized
+                    ) TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+      DATA(ls_return) = VALUE #( lt_return[ 1 ] OPTIONAL ).
+
+      APPEND VALUE #( %cid         = ls_key-%cid_ref
+                      delivery     = ls_key-delivery
+                      deliveryitem = ls_key-deliveryitem
+                      %msg         = new_message( id       = ls_return-id
+                                                  number   = ls_return-number
+                                                  severity = if_abap_behv_message=>severity-error
+                                                  v1       = ls_return-message_v1
+                                                  v2       = ls_return-message_v2
+                                                  v3       = ls_return-message_v3
+                                                  v4       = ls_return-message_v4 )
+                      %update      = if_abap_behv=>auth-unauthorized
+                   ) TO reported-/rb1m/sd_c_delivery_change_ewm.
+      RETURN.
+
+    ENDIF.
+**********************************************************************
+    "-- Delivery Block Validation
+**********************************************************************
+    DATA(lo_db_monitor)  = NEW /rb4r/cl_qm_db_monitor( ).
+
+    lo_db_monitor->db_check_for_block(
+        EXPORTING
+            iv_matnr     = ls_delivery-material
+            iv_plant     = ls_delivery-plant
+            iv_kunnr     = ls_delivery-shiptoparty
+            iv_partner   = COND parvw( WHEN ls_delivery-shiptoparty EQ ''
+                                          THEN ''
+                                        ELSE /rb1m/if_sd_chadela_constant=>gc_sh )
+            iv_kunag     = ls_del_header-soldtoparty
+            iv_partner_g = COND parvw( WHEN ls_del_header-soldtoparty EQ ''
+                                          THEN ''
+                                        ELSE /rb1m/if_sd_chadela_constant=>gc_sp )
+            iv_batch     = ls_del_item-batch
+            iv_quan      = lv_difference_qty
+            iv_uom       = ls_item-qty-uom
+            iv_doc_type  = ls_delivery-deliverytype
+            iv_call_from = /rb1m/if_sd_chadela_constant=>gc_chadela
+            iv_date      = sy-datum
+          IMPORTING
+            et_return    = lt_return
+            ev_block     = DATA(lv_block) ).
+    IF line_exists( lt_return[ type = /rb1m/if_sd_chadela_constant=>gc_error ] ).
+      APPEND VALUE #( %cid         = ls_key-%cid_ref
+                      delivery     = ls_key-delivery
+                      deliveryitem = ls_key-deliveryitem
+                      %update      = if_abap_behv=>auth-unauthorized
+                    ) TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+      ls_return = VALUE #( lt_return[ 1 ] OPTIONAL ).
+
+      APPEND VALUE #( %cid         = ls_key-%cid_ref
+                      delivery     = ls_key-delivery
+                      deliveryitem = ls_key-deliveryitem
+                      %msg         = new_message( id       = ls_return-id
+                                                  number   = ls_return-number
+                                                  severity = if_abap_behv_message=>severity-error
+                                                  v1       = ls_return-message_v1
+                                                  v2       = ls_return-message_v2
+                                                  v3       = ls_return-message_v3
+                                                  v4       = ls_return-message_v4 )
+                      %update      = if_abap_behv=>auth-unauthorized
+                   ) TO reported-/rb1m/sd_c_delivery_change_ewm.
+      RETURN.
+
+    ENDIF.
+**********************************************************************
+
+    "-- Check the Picking Status of all the items.
+    LOOP AT lt_delivery_data ASSIGNING FIELD-SYMBOL(<ls_del>).
+      DATA(lv_picking_status) = lo_process->get_picking_status( iv_delivery      = <ls_del>-delivery
+                                                                iv_delivery_item = <ls_del>-deliveryitem
+                                                                it_items         = lt_items ).
+      IF lv_picking_status <> 1.
+        EXIT.
+      ELSE.
+        " --Fill Delivery Item Quantity to 0.
+        APPEND VALUE #( deliv_numb = <ls_del>-delivery
+                        deliv_item = <ls_del>-deliveryitem
+                        dlv_qty    = 0 )
+               TO lt_item_data[].
+
+        APPEND VALUE #( deliv_numb = <ls_del>-delivery
+                        deliv_item = <ls_del>-deliveryitem
+                        chg_delqty = abap_true )
+               TO lt_item_control[].
+      ENDIF.
+    ENDLOOP.
+
+    IF lv_picking_status = 1.
+      "-- Check the Open WH Task of all the items.
+      LOOP AT lt_items ASSIGNING <ls_item>.
+        "--Reading Warehouse Task
+        lo_data_extractor->read_warehouse_task(
+                EXPORTING iv_warehouse_number = lv_warehouse_no
+                          iv_docid            = <ls_item>-docid
+                          iv_itemid           = <ls_item>-itemid
+                IMPORTING et_wt_open          = DATA(lt_wt_open) ).
+        IF lt_wt_open IS NOT INITIAL.
+          DATA(lv_wh_task_exists) = abap_true.
+          EXIT.
+        ENDIF.
+        CLEAR: lt_wt_open.
+      ENDLOOP.
+
+      IF lv_wh_task_exists IS INITIAL.
+
+        ls_header_data-deliv_numb    = ls_key-delivery.
+        ls_header_control-deliv_numb = ls_key-delivery.
+        CLEAR lt_return.
+        " ---------------------------------------------------------------------
+        " C A L L   B A P I                           -
+        " ---------------------------------------------------------------------
+        CALL FUNCTION 'RFC_CALLBACK_REJECTED'.
+        CALL FUNCTION '/RB1M/SD_CALL_BAPI_DEL_CHANGE' DESTINATION 'NONE'
+          EXPORTING
+            is_header_data    = ls_header_data
+            is_header_control = ls_header_control
+            iv_delivery       = ls_key-delivery
+          TABLES
+            it_item_data      = lt_item_data
+            it_item_control   = lt_item_control
+            et_return         = lt_return.
+        IF line_exists( lt_return[ type = /rb1m/if_sd_chadela_constant=>gc_error ] ).
+          LOOP AT lt_return ASSIGNING FIELD-SYMBOL(<ls_return>).
+            APPEND VALUE #( %cid         = ls_key-%cid_ref
+                            delivery     = ls_key-delivery
+                            deliveryitem = ls_key-deliveryitem
+                            %update      = if_abap_behv=>auth-unauthorized )
+                   TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+            APPEND VALUE #( %cid         = ls_key-%cid_ref
+                            delivery     = ls_key-delivery
+                            deliveryitem = ls_key-deliveryitem
+                            %msg         = new_message( id       = <ls_return>-id
+                                                        number   = <ls_return>-number
+                                                        v1       = <ls_return>-message_v1
+                                                        v2       = <ls_return>-message_v2
+                                                        v3       = <ls_return>-message_v3
+                                                        v4       = <ls_return>-message_v4
+                                                        severity = if_abap_behv_message=>severity-error )
+                            %update      = if_abap_behv=>auth-unauthorized )
+                   TO reported-/rb1m/sd_c_delivery_change_ewm.
+          ENDLOOP.
+        ELSE. " --Success
+          APPEND VALUE #( %cid         = ls_key-%cid_ref
+                          delivery     = ls_key-delivery
+                          deliveryitem = ls_key-deliveryitem
+                          %msg         = new_message( id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                                      number   = 006
+                                                      severity = if_abap_behv_message=>severity-success )
+                          %update      = if_abap_behv=>auth-allowed )
+                 TO reported-/rb1m/sd_c_delivery_change_ewm.
+        ENDIF.
+      ELSE. "-- Open WH Task Exist check
+        APPEND VALUE #( %cid         = ls_key-%cid_ref
+                        delivery     = ls_key-delivery
+                        deliveryitem = ls_key-deliveryitem
+                        %update      = if_abap_behv=>auth-unauthorized )
+               TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+        APPEND VALUE #( %cid         = ls_key-%cid_ref
+                        delivery     = ls_key-delivery
+                        deliveryitem = ls_key-deliveryitem
+                        %msg         = new_message( id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                                    number   = 005
+                                                    severity = if_abap_behv_message=>severity-error )
+                        %update      = if_abap_behv=>auth-unauthorized )
+               TO reported-/rb1m/sd_c_delivery_change_ewm.
+
+      ENDIF.
+    ELSE. "-- Picking Status Check
+      APPEND VALUE #( %cid         = ls_key-%cid_ref
+                      delivery     = ls_key-delivery
+                      deliveryitem = ls_key-deliveryitem
+                      %update      = if_abap_behv=>auth-unauthorized )
+             TO failed-/rb1m/sd_c_delivery_change_ewm.
+
+      APPEND VALUE #( %cid         = ls_key-%cid_ref
+                      delivery     = ls_key-delivery
+                      deliveryitem = ls_key-deliveryitem
+                      %msg         = new_message( id       = /rb1m/if_sd_chadela_constant=>gc_message_id
+                                                  number   = 005
+                                                  severity = if_abap_behv_message=>severity-error )
+                      %update      = if_abap_behv=>auth-unauthorized )
+             TO reported-/rb1m/sd_c_delivery_change_ewm.
+
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+
+
+CLASS lsc_sd_c_delivery_change_ewm DEFINITION INHERITING FROM cl_abap_behavior_saver.
+  PROTECTED SECTION.
+
+    METHODS finalize REDEFINITION.
+
+    METHODS check_before_save REDEFINITION.
+
+    METHODS save REDEFINITION.
+
+    METHODS cleanup REDEFINITION.
+
+    METHODS cleanup_finalize REDEFINITION.
+
+ENDCLASS.
+
+CLASS lsc_sd_c_delivery_change_ewm IMPLEMENTATION.
+
+  METHOD finalize.
+  ENDMETHOD.
+
+  METHOD check_before_save.
+  ENDMETHOD.
+
+  METHOD save.
+  ENDMETHOD.
+
+  METHOD cleanup.
+  ENDMETHOD.
+
+  METHOD cleanup_finalize.
+  ENDMETHOD.
+
+ENDCLASS.
 
 
