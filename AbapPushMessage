@@ -1,0 +1,1534 @@
+class /RB4R/CL_LO_APC_WSP_EXT_RFID_L definition
+  public
+  inheriting from CL_APC_WSP_EXT_STATELESS_PCP_B
+  final
+  create public .
+
+public section.
+
+  constants MC_APPLICATION_ID type AMC_APPLICATION_ID value '/RB4R/LO_RFID_LOAD_MONITOR_AMC' ##NO_TEXT.
+  constants MC_AMC_CHANNEL_ID type AMC_CHANNEL_ID value '/rfid_monitor' ##NO_TEXT.
+
+  methods SEND_MESSAGE
+    importing
+      value(IV_AMC_APPLICATION_ID) type AMC_APPLICATION_ID
+      value(IV_AMC_CHANNEL_ID) type AMC_CHANNEL_ID
+      value(IV_MESSAGE) type STRING
+    exporting
+      !ES_MESSAGE type BAPIRET2 .
+
+  methods IF_APC_WSP_EXT_PCP~ON_MESSAGE
+    redefinition .
+  methods IF_APC_WSP_EXT_PCP~ON_START
+    redefinition .
+protected section.
+private section.
+
+  methods SEND_ERROR
+    importing
+      !I_MESSAGE_MANAGER type ref to IF_APC_WSP_MESSAGE_MANAGER_PCP
+      !I_TEXT type STRING .
+ENDCLASS.
+
+
+
+CLASS /RB4R/CL_LO_APC_WSP_EXT_RFID_L IMPLEMENTATION.
+
+
+  method IF_APC_WSP_EXT_PCP~ON_MESSAGE.
+
+  endmethod.
+
+
+  method IF_APC_WSP_EXT_PCP~ON_START.
+
+   TRY.
+      " bind the default AMC channel to APC WebSocket connection
+      DATA(lo_binding) = i_context->get_binding_manager( ).
+
+      lo_binding->bind_amc_message_consumer(   i_application_id = mc_application_id
+                                               i_channel_id     = mc_amc_channel_id
+                                               ).
+   CATCH cx_apc_error INTO DATA(lx_apc_error).
+      DATA(lv_message) = lx_apc_error->get_text( ).
+      send_error( i_message_manager = i_message_manager i_text = lv_message ).
+      RETURN.
+
+    CATCH cx_ac_message_type_pcp_error INTO DATA(lx_pcp_error).
+      lv_message = lx_pcp_error->get_text( ).
+      send_error( i_message_manager = i_message_manager i_text = lv_message ).
+      RETURN.
+  ENDTRY.
+  endmethod.
+
+
+  method SEND_ERROR.
+    TRY.
+        DATA(lo_message) = i_message_manager->create_message( ).
+        lo_message->set_field( i_name = 'command' i_value = 'error' ).
+        lo_message->set_text( i_text ).
+        i_message_manager->send( lo_message ).
+      CATCH cx_apc_error INTO DATA(lx_apc_error).
+        data(lv_message) = lx_apc_error->get_text( ) ##NEEDED.
+        "bad luck
+      CATCH cx_ac_message_type_pcp_error INTO DATA(lx_ac_error).
+         lv_message = lx_ac_error->get_text( ).
+        "bad luck
+    ENDTRY.
+  endmethod.
+
+
+  method SEND_MESSAGE.
+    DATA:
+    lr_producer TYPE REF TO if_amc_message_producer_pcp,
+    lr_message  TYPE REF TO if_ac_message_type_pcp.
+
+  TRY.
+      lr_producer ?= cl_amc_channel_manager=>create_message_producer(
+          i_application_id = iv_amc_application_id
+          i_channel_id = iv_amc_channel_id
+      ).
+*     Create message
+      lr_message = cl_ac_message_type_pcp=>create( ).
+*     Set message
+      lr_message->set_text( i_message = iv_message ).
+*     send message
+      lr_producer->send( i_message = lr_message ).
+    CATCH cx_ac_message_type_pcp_error INTO DATA(lx_ac_message_type_pcp_error).
+      IF lx_ac_message_type_pcp_error IS NOT INITIAL .
+        es_message-id = '00'.
+        es_message-type = 'E'.
+        es_message-number = '001'.
+        es_message-message_v1 = lx_ac_message_type_pcp_error->get_text( ).
+        MESSAGE ID es_message-id TYPE es_message-type NUMBER es_message-number INTO es_message-message WITH es_message-message_v1.
+      ENDIF.
+    CATCH cx_amc_error INTO DATA(lx_amc_error).
+      IF lx_amc_error IS NOT INITIAL .
+        es_message-id = '00'.
+        es_message-type = 'E'.
+        es_message-number = '001'.
+        es_message-message_v1 = lx_amc_error->get_text( ).
+        MESSAGE ID es_message-id TYPE es_message-type NUMBER es_message-number INTO es_message-message WITH es_message-message_v1.
+      ENDIF.
+  ENDTRY.
+  endmethod.
+ENDCLASS.
+
+* Class consume to call send message
+
+class /RB4R/CL_LO_AUTO_ID_LOAD_CTRL definition
+  public
+  final
+  create public .
+
+public section.
+
+  types:
+    TT_BAPIHUNUMBER TYPE STANDARD TABLE OF bapihunumber .
+  types:
+    TT_bapihuheader TYPE STANDARD TABLE OF bapihuheader .
+
+  constants MC_AMC_CHANNEL_ID type AMC_CHANNEL_ID value '/rfid_monitor' ##NO_TEXT.
+  constants MC_AMC_APPLICATION type AMC_APPLICATION_ID value '/RB4R/LO_RFID_LOAD_MONITOR_AMC' ##NO_TEXT.
+  constants MC_DIR_IN type CHAR03 value 'IN' ##NO_TEXT.
+  constants MC_DIR_OUT type CHAR03 value 'OUT' ##NO_TEXT.
+
+  methods UNLOAD_HU
+    importing
+      !IS_DATA type /RB4R/LO_S_LOAD_CONTROL_API
+    exporting
+      !EV_ERROR type XFELD
+      !ET_BAPIRET type BAPIRET2_T
+      !ES_OUTPUT type /RB4R/LO_S_LOAD_CONTROL_API
+      !EV_LOAD_COMPLETED type XFELD .
+  methods LOAD_HU
+    importing
+      !IS_DATA type /RB4R/LO_S_LOAD_CONTROL_API
+    exporting
+      !EV_ERROR type XFELD
+      !ET_BAPIRET type BAPIRET2_T
+      !ES_OUTPUT type /RB4R/LO_S_LOAD_CONTROL_API
+      !EV_LOAD_COMPLETED type XFELD
+      !EV_WRONG_HU_EXISTS type XFELD
+      !EV_FO_NOT_RELEASED type XFELD .
+  methods PUSH_FROND_END
+    importing
+      !IV_LGNUM type /SCWM/LGNUM optional
+      !IV_GATE type /SCWM/DE_RF_DOOR optional
+      !IV_LOAD_COMPLETED type XFELD optional
+      !IV_WRONG_HU_EXISTS type XFELD optional
+      !IV_FO_NOT_RELEASED type XFELD optional
+      !IV_LOAD_INFO_DISP type XFELD optional
+      !IV_DELAY_REFRESH type XFELD optional
+      !IV_MSG_TIME type NUM4 optional .
+  methods UPDATE_BUFFER_FOR_RELEASE_LOAD
+    importing
+      !IV_LGNUM type /SCWM/LGNUM
+      !IV_GATE type /SCWM/DE_RF_DOOR
+      !IV_FREIGHT_ORDER type /SCWM/DE_RF_FRDNO
+      !IV_CARRIER type /SCMTMS/PTY_CARRIER optional
+      !IV_LICENSE_PLATE type /RB4C/TM_LICENSE_PLATE optional .
+  methods CLEAR_MONITOR_DB_BUFFER
+    importing
+      !IV_LGNUM type /SCWM/LGNUM optional
+      !IV_GATE type /SCWM/DE_RF_DOOR optional
+      !IV_FREIGHT_ORDER type /SCWM/DE_RF_FRDNO optional .
+  methods UPDATE_BUF_FOR_UNRELEASE_LOAD
+    importing
+      !IV_LGNUM type /SCWM/LGNUM
+      !IV_GATE type /SCWM/DE_RF_DOOR
+      !IV_FREIGHT_ORDER type /SCWM/DE_RF_FRDNO
+    exporting
+      !EV_ERROR type XFELD .
+  methods IS_GATE_VALID_FOR_RFID_LOAD
+    importing
+      !IV_LGNUM type /SCWM/LGNUM
+      !IV_GATE type /SCWM/DE_RF_DOOR
+    returning
+      value(RV_VALID_GATE) type XFELD .
+  methods DETERMINE_HU_DATA
+    importing
+      !IV_HU_NUMBER type EXIDV
+      !IV_LGNUM type /SCWM/LGNUM
+    exporting
+      value(EV_HU_NUMBER) type EXIDV
+      value(EV_ERROR) type XFELD .
+  methods READ_HU_EXT_NUMBER
+    importing
+      !IT_HUNUMBERS type TT_BAPIHUNUMBER
+    exporting
+      value(ET_HUHEADER) type TT_BAPIHUHEADER .
+protected section.
+private section.
+
+  data MS_OUTPUT_DATA type /RB4R/LO_S_LOAD_CONTROL_API .
+  data MT_LOAD type /RB4R/LO_T_LOAD_R .
+  data MS_HDLINE type /RB4R/LO_HDLINE .
+  data MV_LOPT type /SCWM/DE_RF_LOPT .
+  data MV_LAST_SCAN_HU type /BOBF/CONF_KEY .
+  data MV_CARRIER type /SCMTMS/PTY_CARRIER .
+  data MS_ERROR_HU type /RB4R/LO_RFIDERR .
+  data MV_WRONG_HU type XFELD .
+
+  methods CLEAR_BUFFER .
+  methods UPDATE_UNLOADING_STATUS
+    importing
+      !IS_DATA type /RB4R/LO_S_LOAD_CONTROL_API
+    exporting
+      !EV_ERROR type XFELD
+      !ET_BAPIRET type BAPIRET2_T .
+  methods UPDATE_LOADING_STATUS
+    importing
+      !IS_DATA type /RB4R/LO_S_LOAD_CONTROL_API
+    exporting
+      !EV_ERROR type XFELD
+      !ET_BAPIRET type BAPIRET2_T .
+  methods VALIDATATE_DATA
+    importing
+      !IS_DATA type /RB4R/LO_S_LOAD_CONTROL_API
+    exporting
+      !EV_ERROR type XFELD
+      !ET_BAPIRET type BAPIRET2_T
+      !EV_FO_NOT_RELEASED type XFELD .
+  methods ADD_MESSAGE
+    changing
+      !CT_BAPIRET type BAPIRET2_T .
+  methods GET_MONITOR_BUFFER
+    exporting
+      !EV_READ_ERROR type XFELD
+      !ET_BAPIRET type BAPIRET2_T .
+  methods UPDATE_MONITOR_BUFFER .
+  methods SET_PGI_AND_CLEAR_BUFFER
+    exporting
+      !EV_ERROR type XFELD
+      !ET_BAPIRET type BAPIRET2_T .
+  methods READ_CARRIER_NAME
+    importing
+      value(IV_CARRIER) type /SCMTMS/PTY_CARRIER optional
+    returning
+      value(RV_CARRIER_NAME) type AD_NAME1 .
+  methods READ_LICENSE_PLATE
+    returning
+      value(RV_LICENSE_PLATE) type /RB4C/TM_LICENSE_PLATE .
+  methods CHECK_ERROR_HU_EXISTS
+    returning
+      value(RV_ERROR_HU_EXISTS) type XFELD .
+  methods CHECK_SCANNED_HU_LOADED_TM
+    returning
+      value(RV_LOADED) type XFELD .
+ENDCLASS.
+
+
+
+CLASS /RB4R/CL_LO_AUTO_ID_LOAD_CTRL IMPLEMENTATION.
+
+
+  METHOD add_message.
+
+*-Add system message in table.
+    APPEND VALUE #( type       = sy-msgty
+                    id         = sy-msgid
+                    number     = sy-msgno
+                    message_v1 = sy-msgv1
+                    message_v2 = sy-msgv2
+                    message_v3 = sy-msgv3
+                    message_v4 = sy-msgv4 ) TO ct_bapiret.
+
+  ENDMETHOD.
+
+
+  METHOD check_error_hu_exists.
+
+*-Check error HUs against warehouse Gate
+
+    SELECT SINGLE @abap_true
+           FROM /rb4r/lo_i_rfiderrorbasic
+           INTO @DATA(lv_exists)
+           WHERE  lgnum = @ms_output_data-warehouseno
+           AND     gate = @ms_output_data-gate.
+    IF sy-subrc IS INITIAL.
+      rv_error_hu_exists = abap_true.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD check_scanned_hu_loaded_tm.
+
+    CHECK mv_last_scan_hu IS NOT INITIAL.
+
+*-Get loading status
+    SELECT SINGLE transporditemhndlgexecstatus       "#EC CI_SEL_NESTED
+          FROM i_transportationorderitem
+         WHERE transportationorderitemuuid = @mv_last_scan_hu
+           INTO @DATA(lv_load_status).
+    IF sy-subrc IS INITIAL.
+      rv_loaded = COND #( WHEN lv_load_status = /scmtms/if_tor_status_c=>sc_item_tr-handling_exec-v_loaded
+                          THEN abap_true ELSE abap_false ).
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD clear_buffer.
+
+    CLEAR: ms_output_data,
+           ms_hdline,
+           mt_load,
+           mv_carrier,
+           mv_lopt,
+           mv_last_scan_hu,
+           ms_error_hu,
+           mv_wrong_hu.
+
+  ENDMETHOD.
+
+
+  METHOD clear_monitor_db_buffer.
+
+    TEST-SEAM clear_db.
+      IF NOT ( iv_lgnum IS INITIAL AND iv_gate IS INITIAL ).
+
+        DELETE FROM /rb4r/lo_hdline WHERE lgnum = iv_lgnum AND gate = iv_gate. "#EC CI_SUBRC
+
+        DELETE FROM /rb4r/lo_rfiderr WHERE lgnum = iv_lgnum AND gate = iv_gate. "#EC CI_SUBRC
+
+      ENDIF.
+
+      IF iv_freight_order IS NOT INITIAL.
+
+        DELETE FROM /rb4r/lo_load_r WHERE freightorder = iv_freight_order. "#EC CI_SUBRC
+
+      ENDIF.
+    END-TEST-SEAM.
+  ENDMETHOD.
+
+
+  METHOD determine_hu_data.
+
+    DATA: lt_mapstloc TYPE /scwm/tt_tmapstloc,
+          lv_msg      TYPE text100.
+
+    DATA(lo_det_hu) = NEW /rb4r/cl_sd_det_hu_data( ).
+
+    TRY.
+        lo_det_hu->determine_hu_data(
+            EXPORTING
+              i_hu_number = iv_hu_number
+            IMPORTING
+              e_hu_number = ev_hu_number ).
+
+      CATCH /rb4r/cx_sd_det_hu_data INTO DATA(lo_ex). " Exception class for HU DATA determin.
+
+*-In case of multiple HUs found, Read HU with Plant
+        IF lo_ex->if_t100_message~t100key-msgid = '/RB4R/SD_DET_HU_MSG'
+        AND lo_ex->if_t100_message~t100key-msgno = 006.
+
+          CALL FUNCTION '/SCWM/TMAPSTLOC_READ_MULTI'   "Plant --> Warehouse number mapping
+            EXPORTING
+              iv_lgnum     = iv_lgnum
+            IMPORTING
+              et_tmapstloc = lt_mapstloc
+            EXCEPTIONS
+              not_found    = 1
+              OTHERS       = 2.
+          IF sy-subrc IS INITIAL.
+            /scmtms/cl_logint_cmn_reuse=>get_bsg_and_logsys( IMPORTING ev_logsys = DATA(lv_logsys) ).
+            SORT lt_mapstloc BY logsys.
+            DELETE lt_mapstloc WHERE logsys NE lv_logsys. "Filter with Logical system
+
+            SORT  lt_mapstloc BY plant.
+            DELETE ADJACENT DUPLICATES FROM lt_mapstloc COMPARING plant.  "Remome Duplicate entries of plant
+            IF lines( lt_mapstloc ) = 1.   "Single plant --> Read HU with plant number
+              TRY.
+                  lo_det_hu->determine_hu_data(
+                    EXPORTING
+                      i_hu_number     = iv_hu_number
+                      i_plant         = VALUE #( lt_mapstloc[ 1 ]-plant )
+                    IMPORTING
+                      e_hu_number     = ev_hu_number ).
+                CATCH /rb4r/cx_sd_det_hu_data INTO DATA(lo_ex1). " Exception class for HU DATA determin.
+                  IF lo_ex1->if_t100_message~t100key-msgid = '/RB4R/SD_DET_HU_MSG'
+                  AND lo_ex1->if_t100_message~t100key-msgno = 006.
+                    DATA(lv_multi_hu_err) =  abap_true.  "IF Multiple HU found, Raise error to Partial unload not possible
+                  ELSE.
+                    ev_error = abap_true.
+                    MESSAGE ID lo_ex1->if_t100_message~t100key-msgid
+                    TYPE 'E'
+                    NUMBER  lo_ex1->if_t100_message~t100key-msgno
+                    WITH    lo_ex1->if_t100_message~t100key-attr1
+                            lo_ex1->if_t100_message~t100key-attr2
+                            lo_ex1->if_t100_message~t100key-attr3
+                            lo_ex1->if_t100_message~t100key-attr4
+                    INTO lv_msg.
+                  ENDIF.
+              ENDTRY.
+            ELSE. "Multiple plant for warehouse --> Raise error
+              lv_multi_hu_err = abap_true.
+            ENDIF.
+          ELSE.
+            lv_multi_hu_err = abap_true.
+          ENDIF.
+        ELSE.
+          ev_error = abap_true.
+          MESSAGE ID lo_ex->if_t100_message~t100key-msgid
+          TYPE 'E'
+          NUMBER  lo_ex->if_t100_message~t100key-msgno
+          WITH    lo_ex->if_t100_message~t100key-attr1
+                  lo_ex->if_t100_message~t100key-attr2
+                  lo_ex->if_t100_message~t100key-attr3
+                  lo_ex->if_t100_message~t100key-attr4
+         INTO lv_msg.
+        ENDIF.
+    ENDTRY.
+    IF lv_multi_hu_err = abap_true.
+      ev_error = abap_true.
+      MESSAGE e020(/rb4r/lo_rfid_load) INTO lv_msg.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD get_monitor_buffer.
+
+    DATA: ls_excl_prd_dat TYPE /scwm/dlv_query_excl_str,
+          ls_read_options TYPE /scwm/dlv_query_contr_str,
+          lt_selection    TYPE /scwm/dlv_selection_tab,
+          lt_hu_headers   TYPE /scwm/tt_huhdr_int,
+          lt_hustat       TYPE /scwm/tt_hustatus,
+          lv_loaded       TYPE int4,
+          ls_load         TYPE /rb4r/lo_load_r.
+
+*-Store Error message for update.
+    IF ms_hdline-message IS NOT INITIAL.
+      DATA(lv_msg) = ms_hdline-message.
+    ENDIF.
+
+*-Header line table
+    SELECT SINGLE
+      lgnum,
+      gate,
+      freightorder,
+      currentcount AS current_count,
+      totalcount   AS total_count,
+      loadtruck,
+      message,
+      carrier,
+      carriername AS carrier_name,
+      licenseplate
+      FROM /rb4r/lo_i_rfidheaderlinebasic
+      INTO @DATA(ls_hdline)
+      WHERE lgnum = @ms_output_data-warehouseno
+      AND gate = @ms_output_data-gate.
+    IF sy-subrc IS NOT INITIAL OR ls_hdline-freightorder IS INITIAL.
+
+*-If loading not started in RFID, Unloading of HU not possible.
+      IF ms_output_data-direction = mc_dir_out.
+        MESSAGE e016(/rb4r/lo_rfid_load) INTO lv_msg.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ev_read_error = abap_true.
+        RETURN.
+      ENDIF.
+
+      ms_hdline =  VALUE #( lgnum         = ms_output_data-warehouseno
+                            gate          = ms_output_data-gate
+                            freightorder  = ms_output_data-freightorder
+                            carrier       = mv_carrier
+                            carrier_name  = read_carrier_name( )
+                            license_plate = read_license_plate( ) ).
+      DATA(lv_first_read) = abap_true.
+    ELSE.
+      ms_hdline = CORRESPONDING #( ls_hdline EXCEPT message ).
+      IF ms_hdline-total_count IS INITIAL
+      AND ms_output_data-direction = mc_dir_in. "Loading.
+        lv_first_read = abap_true.
+      ENDIF.
+
+      IF  mv_wrong_hu = abap_true
+      AND ms_output_data-direction = mc_dir_in. "Loading.
+*-Wrong HU & FO
+        read_hu_ext_number( EXPORTING it_hunumbers = VALUE #( ( hu_exid = ms_output_data-handlingunit ) )
+                            IMPORTING et_huheader  = DATA(lt_huheader_erp) ).
+        IF lt_huheader_erp IS NOT INITIAL.
+          DATA(lv_erp_hu) = lt_huheader_erp[ 1 ]-ext_id_hu_2.
+        ENDIF.
+
+        MESSAGE e012(/rb4r/lo_rfid_load) WITH ls_hdline-freightorder INTO lv_msg.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ev_read_error = abap_true.
+        ms_error_hu = VALUE #( lgnum        = ms_output_data-warehouseno
+                               gate         = ms_output_data-gate
+                               hunumber     = ms_output_data-handlingunit
+                               hunumber_ext = COND #( WHEN lv_erp_hu IS NOT INITIAL THEN lv_erp_hu
+                                                      ELSE ms_output_data-handlingunit )
+                               status       = 'R' "Remove HU
+                               ecomment     = lv_msg ).
+      ENDIF.
+    ENDIF.
+
+*-Update Load direction
+    ms_hdline-loadtruck = COND #( WHEN ms_output_data-direction = mc_dir_in THEN abap_true
+                                  ELSE abap_false ).
+
+*-Update error message.
+    IF lv_msg IS NOT INITIAL.
+      ms_hdline-message = lv_msg.
+      RETURN.
+    ENDIF.
+
+*-Read HU list from DB
+    IF lv_first_read = abap_true.
+
+      lt_selection = VALUE #( option    = wmegc_option_eq
+                            ( fieldname = /scwm/if_dl_logfname_c=>sc_whno_i
+                              low       = ms_output_data-warehouseno )
+                            ( fieldname = /scdl/if_dl_logfname_c=>sc_refdocno_frd_h
+                              low       = |{ ms_output_data-freightorder ALPHA = IN }| )
+                            ( fieldname = /scwm/if_dl_logfname_c=>sc_locationno_lp_i
+                              low       = mv_lopt )
+                            ( fieldname = /scdl/if_dl_logfname_c=>sc_status_value_dbo_i
+                              low       = /scdl/if_dl_status_c=>sc_v_false ) ).
+
+      CLEAR ls_excl_prd_dat WITH abap_true.
+      ls_excl_prd_dat-hu_data     = ''.
+      ls_excl_prd_dat-hu_prd_data = ''.
+      ls_read_options-data_retrival_only      = 'X'.
+      ls_read_options-mix_in_object_instances = 'Y'. "DB Fetch
+
+      TEST-SEAM hu_query.
+        TRY.
+            /scwm/cl_dlv_management_prd=>get_instance( )->query(
+                          EXPORTING
+                            it_selection    = lt_selection
+                            iv_doccat       = wmegc_doccat_pdo "'PDO'
+                            is_read_options = ls_read_options
+                            is_exclude_data = ls_excl_prd_dat
+                          IMPORTING
+                            et_hu_headers   = lt_hu_headers ).
+          CATCH /scdl/cx_delivery. " Exception Class of Delivery
+            ev_read_error = abap_true.
+        ENDTRY.
+      END-TEST-SEAM.
+
+*-Raise Error message if HU not found.
+      IF lt_hu_headers IS INITIAL .
+        MESSAGE e007(/rb4r/lo_rfid_load) WITH ms_output_data-freightorder INTO lv_msg.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+        ev_read_error = abap_true.
+        RETURN.
+      ENDIF.
+
+*-Load status
+      DELETE lt_hu_headers WHERE top IS INITIAL.
+      DATA(lt_huhdr) = CORRESPONDING /scwm/tt_huhdr_int( lt_hu_headers MAPPING guid_hu = guid_hu huident = huident ).
+
+      CALL FUNCTION '/SCWM/HU_STATUS_SELECT'
+        EXPORTING
+          iv_stat   = wmegc_hustat_loaded
+          it_huhdr  = lt_huhdr
+        IMPORTING
+          et_hustat = lt_hustat.
+
+      read_hu_ext_number( EXPORTING it_hunumbers = CORRESPONDING #( lt_hu_headers MAPPING hu_exid = huident )
+                          IMPORTING et_huheader  = lt_huheader_erp ).
+
+      LOOP AT lt_hu_headers INTO DATA(ls_huhdr).
+        CLEAR: ls_load, lv_erp_hu.
+        lv_erp_hu                = VALUE #( lt_huheader_erp[ hu_exid = ls_huhdr-huident ]-ext_id_hu_2 OPTIONAL ).
+        ls_load-freightorder     = ms_output_data-freightorder.
+        ls_load-handlingunit     = ls_huhdr-huident.
+        ls_load-handlingunit_ext = COND #( WHEN lv_erp_hu IS NOT INITIAL THEN lv_erp_hu ELSE ls_huhdr-huident ).
+        IF line_exists( lt_hustat[ objnr = ls_huhdr-guid_hu inact = abap_false ] ).
+          lv_loaded += 1.
+          ls_load-is_scanned = '+'.  "Already Loaded HUs
+        ENDIF.
+        APPEND ls_load TO mt_load.
+      ENDLOOP.
+
+      ms_hdline-current_count = lv_loaded.
+      ms_hdline-total_count   = lines( mt_load ).
+
+    ELSEIF ms_output_data-direction = mc_dir_in. "Loading; Not first time scan
+      read_hu_ext_number( EXPORTING it_hunumbers = VALUE #( ( hu_exid = ms_output_data-handlingunit ) )
+                          IMPORTING et_huheader  = lt_huheader_erp ).
+
+      CLEAR:lv_erp_hu.
+      IF lt_huheader_erp IS NOT INITIAL.
+        lv_erp_hu = lt_huheader_erp[ 1 ]-ext_id_hu_2.
+      ENDIF.
+
+      mt_load = VALUE #( ( freightorder     = ms_output_data-freightorder
+                           handlingunit     = ms_output_data-handlingunit
+                           handlingunit_ext = COND #( WHEN lv_erp_hu IS NOT INITIAL THEN lv_erp_hu
+                                                      ELSE ms_output_data-handlingunit ) ) ).
+    ENDIF.
+
+*-Check whether Unloading for Error HU
+    IF ms_output_data-direction = mc_dir_out.
+
+      SELECT SINGLE
+             lgnum,
+             gate,
+             hunumber
+        FROM /rb4r/lo_i_rfiderrorbasic
+        INTO CORRESPONDING FIELDS OF @ms_error_hu
+        WHERE  lgnum = @ms_output_data-warehouseno
+        AND     gate = @ms_output_data-gate
+        AND hunumber = @ms_output_data-handlingunit.
+
+      IF sy-subrc <> 0.
+        CLEAR ms_error_hu.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD is_gate_valid_for_rfid_load.
+
+    CHECK NOT ( iv_lgnum IS INITIAL OR iv_gate IS INITIAL ).
+
+    SELECT SINGLE * FROM /rb4r/lo_i_rfidgatebasic
+      WHERE lgnum =  @iv_lgnum AND gate = @iv_gate
+      INTO @DATA(ls_gate).
+
+    IF sy-subrc IS INITIAL AND ls_gate-rfidgate IS NOT INITIAL.
+      rv_valid_gate = abap_true.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD load_hu.
+
+    CLEAR: ev_error, et_bapiret, es_output, ev_load_completed, ev_wrong_hu_exists, ev_fo_not_released.
+
+    clear_buffer( ).
+
+    DATA(ls_data) = is_data.
+*-Determine internal HU number
+    determine_hu_data( EXPORTING iv_hu_number = ls_data-handlingunit
+                                 iv_lgnum     = ls_data-warehouseno
+                       IMPORTING ev_hu_number = ls_data-handlingunit
+                                 ev_error     = ev_error ).
+    IF ev_error = abap_true.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      RETURN.
+    ENDIF.
+
+    ms_output_data = CORRESPONDING #( ls_data EXCEPT gate freightorder ).
+
+*-Validate Input data
+    validatate_data( EXPORTING is_data            = ls_data
+                     IMPORTING ev_error           = ev_error
+                               et_bapiret         = et_bapiret
+                               ev_fo_not_released = ev_fo_not_released ).
+    CHECK ms_output_data-gate IS NOT INITIAL.
+
+*-Get buffer data to update Load monitor
+    get_monitor_buffer( IMPORTING ev_read_error = DATA(lv_read_error)
+                                  et_bapiret    = DATA(lt_bapiret) ).
+    IF lv_read_error = abap_true.
+      ev_error = abap_true.
+      APPEND LINES OF lt_bapiret TO et_bapiret.
+    ENDIF.
+
+*-Set Loading in EWM
+    IF ev_error = abap_false.
+      TEST-SEAM load_hu.
+        update_loading_status( EXPORTING is_data    = ls_data
+                               IMPORTING ev_error   = ev_error
+                                         et_bapiret = et_bapiret ).
+      END-TEST-SEAM.
+    ENDIF.
+
+*-Update Load monitor buffer table
+    IF ev_error = abap_true.
+      CLEAR: mt_load.
+    ENDIF.
+    TEST-SEAM load_buf_upd.
+      update_monitor_buffer( ).
+    END-TEST-SEAM.
+
+*-Trigger PGI and clear buffer table.
+    CHECK ev_error = abap_false.
+    IF ms_hdline-current_count >=  ms_hdline-total_count.
+
+*-Check No Error HUs exists in Truck / Gate
+      IF check_error_hu_exists( ) = abap_false.
+        TEST-SEAM load_pgi.
+          set_pgi_and_clear_buffer( IMPORTING ev_error   = ev_error
+                                              et_bapiret = et_bapiret ).
+        END-TEST-SEAM.
+        IF ms_hdline-current_count = ms_hdline-total_count AND ev_error IS INITIAL.
+*-display message in Load Monitor "All Hus are loaded, PGI in progress".
+          ev_load_completed = abap_true.
+        ENDIF.
+      ELSE.
+*-display message in load monitor "All Hus are loaded, but wrong Hus in trach, please unload"
+*        ev_wrong_hu_exists = abap_true.  "Commended for future reference
+
+      ENDIF.
+    ENDIF.
+    es_output = ms_output_data.
+
+  ENDMETHOD.
+
+
+  METHOD push_frond_end.
+
+    DATA: lv_message TYPE string.
+
+*-Get Gate & Warehouse number
+    IF iv_lgnum IS NOT INITIAL OR iv_gate IS NOT INITIAL.
+      DATA(lv_lgnum) = iv_lgnum.
+      DATA(lv_gate) =  iv_gate.
+
+    ELSEIF ms_hdline IS NOT INITIAL. "From API Buffer
+      lv_lgnum = ms_hdline-lgnum.
+      lv_gate = ms_hdline-gate.
+
+    ELSE.
+      RETURN.
+    ENDIF.
+
+*-Set Message time
+    DATA(lv_msg_time) = COND #( WHEN iv_msg_time IS NOT INITIAL THEN iv_msg_time
+                                ELSE 120 ). "Set defualt timing to disappear message = 120 secs (BBMDIF-43043)
+    DATA(lv_specific_time) = lv_msg_time * 1000. "Convert Seconds to Milliseconds for UI5
+
+*-Prepare Message
+    lv_message = '{ "GATE": "' && lv_gate &&
+                   '", "WarehouseNo": "'  && lv_lgnum &&
+                   '", "NEWDATAAVAILABLE": "X", "HULOADEDSUCCESS": "' && iv_load_completed &&
+                   '", "HULOADEDWRONGHU": "' && iv_wrong_hu_exists &&
+                   '", "FONOTRELEASED": "' && iv_fo_not_released &&
+                   '", "SPECIFICTIMEMSG": "' && lv_specific_time &&
+                   '", "DELAYLOADINNGNEWDATA": "' && iv_delay_refresh &&
+                   '", "RELEASELOADINGFO": "' && iv_load_info_disp && '" }'.
+
+*-Push message to Front-end
+    DATA(lo_rfid_apc) = NEW /rb4r/cl_lo_apc_wsp_ext_rfid_l( ).
+
+    lo_rfid_apc->send_message(
+      EXPORTING
+        iv_amc_application_id = mc_amc_application
+        iv_amc_channel_id     = mc_amc_channel_id
+        iv_message            = lv_message
+      IMPORTING
+        es_message            = DATA(ls_msg) ).
+
+  ENDMETHOD.
+
+
+  METHOD read_carrier_name.
+
+    DATA: lv_addr   TYPE ad_addrnum.
+
+    DATA(lv_carrier) = COND #( WHEN iv_carrier IS NOT INITIAL THEN iv_carrier
+                               ELSE mv_carrier ).
+
+    CHECK lv_carrier IS NOT INITIAL.
+*-Get Carrier address number
+    TEST-SEAM bp_fetch.
+      CALL FUNCTION 'BUPA_ADDRESS_GET_NUMBERS'
+        EXPORTING
+          iv_partner                = lv_carrier
+          iv_valdt_of_standard_addr = sy-datlo
+        IMPORTING
+          ev_addrnumber             = lv_addr.
+    END-TEST-SEAM.
+
+*-Read Carrier
+    SELECT SINGLE businesspartnername1
+      FROM i_address
+      WITH PRIVILEGED ACCESS
+      WHERE addressid = @lv_addr
+      INTO @rv_carrier_name.
+    IF sy-subrc <> 0.
+      CLEAR rv_carrier_name.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD read_hu_ext_number.
+    DATA: lt_hunumbers TYPE STANDARD TABLE OF bapihunumber,
+          lt_return    TYPE bapiret2_t.
+
+    lt_hunumbers[] = it_hunumbers.
+    " Read HU details
+    CALL FUNCTION 'BAPI_HU_GETLIST' "#EC CI_USAGE_OK[2438131] lt_return not used.
+      EXPORTING
+        onlykeys  = abap_false
+      TABLES
+        hunumbers = lt_hunumbers
+        huheader  = et_huheader
+        return    = lt_return.
+
+  ENDMETHOD.
+
+
+  METHOD read_license_plate.
+
+    DATA: lv_torid TYPE /scmtms/tor_id.
+
+    CHECK NOT ms_output_data-freightorder IS INITIAL.
+
+    lv_torid = |{ ms_output_data-freightorder  ALPHA = IN }|.
+**-Read License plate number
+    SELECT SINGLE transpordactvvehrscepltnmbr
+    FROM i_transportationorderitem
+    WHERE \_transportationorder-transportationorder = @lv_torid
+      AND transporditemcategory = @/scmtms/if_tor_const=>sc_tor_item_category-av_item
+      INTO @rv_license_plate.
+    IF sy-subrc <> 0.
+      CLEAR: rv_license_plate.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD set_pgi_and_clear_buffer.
+
+    DATA: ls_excl_prd_dat TYPE /scwm/dlv_query_excl_str,
+          ls_read_options TYPE /scwm/dlv_query_contr_str,
+          lt_selection    TYPE /scwm/dlv_selection_tab,
+          lt_hu_headers   TYPE /scwm/tt_huhdr_int,
+          lt_hustat       TYPE /scwm/tt_hustatus,
+          lv_msg          TYPE bapi_msg,
+          lt_message      TYPE bapiret2_tab,
+          ls_message      TYPE bapiret2.
+
+    CLEAR: ev_error, et_bapiret.
+
+    IF mv_lopt IS INITIAL.
+*-Freight order & Door block status
+      TRY.
+          /scwm/cl_rf_asr=>get_instance( )->/scwm/if_rf_asr~get_lp_door_by_bol(
+            EXPORTING
+              iv_bol         = ms_hdline-freightorder
+              iv_whse_no     = ms_hdline-lgnum
+              iv_direction   = /scwm/if_af_sr_transport=>sc_direction-outbound
+            IMPORTING
+              et_t_lp_door   = DATA(lt_lp_door) ).
+
+        CATCH /scwm/cx_rf_asr. " Exception Class for RF Advanced S&R
+          ev_error = abap_true.
+          MESSAGE e008(/rb4r/lo_rfid_load) WITH ms_hdline-freightorder INTO lv_msg.
+          add_message( CHANGING ct_bapiret = et_bapiret ).
+          ms_hdline-message = lv_msg.
+          RETURN.
+      ENDTRY.
+
+      mv_lopt = lt_lp_door[ door = ms_hdline-gate ]-unl_point.
+      IF mv_lopt IS INITIAL.
+        ev_error = abap_true.
+        MESSAGE e010(/rb4r/lo_rfid_load) INTO lv_msg WITH ms_hdline-freightorder ms_hdline-gate.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+      ENDIF.
+    ENDIF.
+
+*-Check HU status at EWM level
+    lt_selection = VALUE #( option    = wmegc_option_eq
+                          ( fieldname = /scwm/if_dl_logfname_c=>sc_whno_i
+                            low       = ms_hdline-lgnum )
+                          ( fieldname = /scdl/if_dl_logfname_c=>sc_refdocno_frd_h
+                            low       = |{ ms_hdline-freightorder ALPHA = IN }| )
+                          ( fieldname = /scwm/if_dl_logfname_c=>sc_locationno_lp_i
+                            low       = mv_lopt )
+                          ( fieldname = /scdl/if_dl_logfname_c=>sc_status_value_dbo_i
+                            low       = /scdl/if_dl_status_c=>sc_v_false ) ).
+
+    CLEAR ls_excl_prd_dat WITH abap_true.
+    ls_excl_prd_dat-hu_data = ''.
+    ls_excl_prd_dat-hu_prd_data = ''.
+    ls_read_options-data_retrival_only = 'X'.
+    ls_read_options-mix_in_object_instances = 'Y'. "DB Fetch
+
+    TRY.
+        /scwm/cl_dlv_management_prd=>get_instance( )->query(
+                 EXPORTING
+                        it_selection    = lt_selection
+                        iv_doccat       = 'PDO'
+                        is_read_options = ls_read_options
+                        is_exclude_data = ls_excl_prd_dat
+                      IMPORTING
+                        et_hu_headers   = lt_hu_headers ).
+      CATCH /scdl/cx_delivery. " Exception Class of Delivery
+        ev_error = abap_true.
+    ENDTRY.
+
+*-Raise Error message if HU not found.
+    IF lt_hu_headers IS INITIAL .
+      MESSAGE e007(/rb4r/lo_rfid_load) WITH ms_hdline-freightorder INTO lv_msg.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      ms_hdline-message = lv_msg.
+      ev_error = abap_true.
+      RETURN.
+    ENDIF.
+
+*-Load status
+    DELETE lt_hu_headers WHERE top IS INITIAL.
+    DATA(lt_huhdr) = CORRESPONDING /scwm/tt_huhdr_int( lt_hu_headers MAPPING guid_hu = guid_hu huident = huident ).
+
+    CALL FUNCTION '/SCWM/HU_STATUS_SELECT'
+      EXPORTING
+        iv_stat   = wmegc_hustat_loaded
+        it_huhdr  = lt_huhdr
+      IMPORTING
+        et_hustat = lt_hustat.
+
+    DELETE lt_hustat WHERE inact = abap_true.  "Remove not loaded HUs
+
+    ms_hdline-total_count   = lines( lt_hu_headers ).
+    ms_hdline-current_count = lines( lt_hustat ).
+
+    IF ms_hdline-current_count = ms_hdline-total_count.  "All HUs Loaded.
+
+      "Check whether last scanned HU updated in TM.
+      IF ms_output_data-direction = mc_dir_in.
+        DO 10 TIMES.
+          IF check_scanned_hu_loaded_tm( ) = abap_true.
+            EXIT. "Exit from loop if load status updated.
+          ENDIF.
+
+          WAIT UP TO 1 SECONDS.
+        ENDDO.
+      ENDIF.
+
+      "Set loading finished at stop level
+      DATA(lr_load_fin) = NEW /scwm/cl_af_tmi_rf( ).
+
+      lr_load_fin->set_load_finish(
+        EXPORTING
+          iv_lgnum   = ms_hdline-lgnum
+          iv_frdno   = ms_hdline-freightorder
+          iv_lopt    = mv_lopt
+          iv_door    = CONV #( ms_output_data-gate )
+        IMPORTING
+          et_message = lt_message ).
+
+      IF lt_message IS INITIAL.
+        COMMIT WORK AND WAIT.
+      ELSE.
+        ROLLBACK WORK.
+      ENDIF.
+
+      "Return message for user
+      CLEAR ls_message.
+      READ TABLE lt_message INTO ls_message WITH KEY type = 'E'.
+      IF sy-subrc IS NOT INITIAL.
+        READ TABLE lt_message INTO ls_message INDEX 1.
+      ENDIF.
+
+      IF ls_message IS NOT INITIAL.
+        MESSAGE ID ls_message-id TYPE 'E' NUMBER ls_message-number
+        WITH ls_message-message_v1
+             ls_message-message_v2
+             ls_message-message_v3
+             ls_message-message_v4 INTO lv_msg.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+        ev_error = abap_true.
+        RETURN.
+      ENDIF.
+
+*-Display PGI posting message in Front end
+      push_frond_end( iv_lgnum           = ms_output_data-warehouseno
+                      iv_gate            = CONV #( ms_output_data-gate )
+                      iv_load_completed  = abap_true ).
+      WAIT UP TO 1 SECONDS.
+
+*-Clear Buffer tables.
+      DELETE FROM /rb4r/lo_hdline WHERE ( lgnum = ms_output_data-warehouseno AND
+                                          gate  = ms_output_data-gate ).
+      IF sy-subrc <> 0.
+        MESSAGE e009(/rb4r/lo_rfid_load) INTO lv_msg.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+        ev_error = abap_true.
+        RETURN.
+      ENDIF.
+
+      DELETE FROM /rb4r/lo_load_r WHERE ( freightorder = ms_hdline-freightorder ).
+      IF sy-subrc <> 0.
+        MESSAGE e009(/rb4r/lo_rfid_load) INTO lv_msg.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+        ev_error = abap_true.
+        RETURN.
+      ENDIF.
+
+      DELETE FROM /rb4r/lo_rfiderr WHERE ( lgnum = ms_output_data-warehouseno AND
+                                           gate  = ms_output_data-gate ). "#EC CI_SUBRC  "No Error handing required for error hus
+
+      COMMIT WORK AND WAIT.
+*-Update correct count details.
+    ELSE.
+      CLEAR: mt_load, ms_error_hu.
+      update_monitor_buffer( ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD unload_hu.
+
+    CLEAR: ev_error, et_bapiret, es_output, ev_load_completed.
+
+    clear_buffer( ).
+
+    DATA(ls_data) = is_data.
+*-Determine internal HU number
+    determine_hu_data( EXPORTING iv_hu_number = ls_data-handlingunit
+                                 iv_lgnum     = ls_data-warehouseno
+                       IMPORTING ev_hu_number = ls_data-handlingunit
+                                 ev_error     = ev_error ).
+    IF ev_error = abap_true.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      RETURN.
+    ENDIF.
+
+    ms_output_data = CORRESPONDING #( ls_data EXCEPT gate freightorder ).
+
+*-Validate Input data
+    validatate_data( EXPORTING is_data    = ls_data
+                     IMPORTING ev_error   = ev_error
+                               et_bapiret = et_bapiret ).
+    CHECK ms_output_data-gate IS NOT INITIAL.
+
+*-Get buffer data to update Load monitor
+    get_monitor_buffer( IMPORTING ev_read_error = DATA(lv_read_error)
+                                  et_bapiret    = DATA(lt_bapiret) ).
+    IF lv_read_error = abap_true.
+      ev_error = abap_true.
+      APPEND LINES OF lt_bapiret TO et_bapiret.
+    ENDIF.
+
+*-Set Unloading in EWM
+    IF ev_error = abap_false AND ms_error_hu IS INITIAL.
+      TEST-SEAM unload_hu.
+        update_unloading_status( EXPORTING is_data    = ls_data
+                                 IMPORTING ev_error   = ev_error
+                                           et_bapiret = et_bapiret ).
+      END-TEST-SEAM.
+    ENDIF.
+
+*-Update Load monitor buffer table
+    IF ev_error = abap_true.
+      CLEAR: mt_load.
+    ENDIF.
+
+    TEST-SEAM unload_buf_upd.
+      update_monitor_buffer( ).
+    END-TEST-SEAM.
+
+*-Trigger PGI and clear buffer table.
+    CHECK ev_error = abap_false.
+    IF  ms_hdline-current_count >=  ms_hdline-total_count "All HUs Loaded.
+    AND check_error_hu_exists( ) = abap_false.  "No Error HUs exists
+
+      TEST-SEAM unload_pgi.
+        set_pgi_and_clear_buffer( IMPORTING ev_error   = ev_error
+                                            et_bapiret = et_bapiret ).
+      END-TEST-SEAM.
+
+      IF ms_hdline-current_count = ms_hdline-total_count.
+*-display message in Load Monitor "All Hus are loaded, PGI in progress".
+        ev_load_completed = abap_true.
+      ENDIF.
+    ENDIF.
+    es_output = ms_output_data.
+
+  ENDMETHOD.
+
+
+  METHOD update_buffer_for_release_load.
+
+    DATA: ls_hdline TYPE /rb4r/lo_hdline,
+          lv_addr   TYPE ad_addrnum.
+
+    CHECK NOT ( iv_lgnum IS INITIAL AND iv_gate IS INITIAL ).
+    CHECK is_gate_valid_for_rfid_load( iv_lgnum = iv_lgnum
+                                       iv_gate  = iv_gate ) .
+
+    clear_monitor_db_buffer( iv_lgnum         = iv_lgnum
+                             iv_gate          = iv_gate
+                             iv_freight_order = iv_freight_order ).
+
+    ls_hdline = VALUE #( lgnum         = iv_lgnum
+                         gate          = iv_gate
+                         freightorder  = iv_freight_order
+                         carrier       = iv_carrier
+                         license_plate = iv_license_plate
+                         carrier_name  = read_carrier_name( iv_carrier ) ).
+
+    TEST-SEAM upd_release_load.
+      MODIFY /rb4r/lo_hdline FROM ls_hdline.
+      IF sy-subrc IS NOT INITIAL.
+        ROLLBACK WORK.
+      ENDIF.
+    END-TEST-SEAM.
+
+*-Update Front end
+    push_frond_end( iv_lgnum = iv_lgnum iv_gate  = iv_gate iv_load_info_disp = abap_true ).
+
+  ENDMETHOD.
+
+
+  METHOD update_buf_for_unrelease_load.
+
+    DATA: lv_msg TYPE char100.
+
+    CLEAR: ev_error.
+
+    CHECK NOT ( iv_lgnum IS INITIAL AND iv_gate IS INITIAL AND iv_freight_order IS INITIAL ).
+    CHECK is_gate_valid_for_rfid_load( iv_lgnum = iv_lgnum iv_gate  = iv_gate ) .
+
+*-Check loaded HUs in Load table.
+    SELECT SINGLE @abap_true FROM /rb4r/lo_i_rfidloadbasic
+      WHERE freightorder = @iv_freight_order AND isscanned = '+'
+      INTO @DATA(lv_loaded_hus).
+    IF sy-subrc IS INITIAL.
+      MESSAGE e018(/rb4r/lo_rfid_load) WITH iv_freight_order INTO lv_msg.
+      ev_error = abap_true.
+      RETURN.
+    ENDIF.
+
+*-Check Error HUs in Door
+    SELECT SINGLE @abap_true FROM /rb4r/lo_i_rfiderrorbasic
+      WHERE lgnum = @iv_lgnum AND gate = @iv_gate
+      INTO @lv_loaded_hus.
+    IF sy-subrc IS INITIAL.
+      MESSAGE e019(/rb4r/lo_rfid_load) WITH iv_gate INTO lv_msg.
+      ev_error = abap_true.
+      RETURN.
+    ENDIF.
+
+*-Clear monitor buffer from DB
+    clear_monitor_db_buffer( iv_lgnum         = iv_lgnum
+                             iv_gate          = iv_gate
+                             iv_freight_order = iv_freight_order ).
+
+*-Update Front end
+    push_frond_end( iv_lgnum = iv_lgnum iv_gate  = iv_gate ).
+
+  ENDMETHOD.
+
+
+  METHOD update_loading_status.
+
+    DATA: lo_bd_local_upd TYPE REF TO /rb4r/lo_bd_rfid_local_upd.
+
+    CLEAR: ev_error, et_bapiret.
+    DATA(lo_log) = NEW /scwm/cl_log( ).
+    TRY.
+        /scwm/cl_sr_bom_dlv=>get_instance( )->set_dlv_hu_load(
+          EXPORTING
+            iv_lgnum          = is_data-warehouseno
+            it_huident        = VALUE #( ( lgnum = is_data-warehouseno huident = is_data-handlingunit ) )
+            iv_sr_dlv_act     = wmesr_act_load
+            io_log            = lo_log
+          IMPORTING
+            ev_rejected       = ev_error
+            et_return_codes   = DATA(lt_return_code) ).
+
+      CATCH /scwm/cx_sr_error. " Superclass for Exceptions in Shipping/Receiving
+        ev_error = abap_true.
+    ENDTRY.
+
+    DATA(lt_message) = lo_log->get_prot( ).
+    IF ev_error = abap_true OR line_exists( lt_return_code[ failed = abap_true ] ).
+      ev_error = abap_true.
+      ROLLBACK WORK.
+      /scwm/cl_tm=>cleanup( ).
+      et_bapiret = lt_message.
+
+    ELSE.
+      LOOP AT lt_message INTO DATA(ls_message) WHERE type CA 'EA'.
+
+        MESSAGE ID ls_message-id TYPE 'E' NUMBER ls_message-number
+            WITH ls_message-message_v1 ls_message-message_v2
+                 ls_message-message_v3 ls_message-message_v4 INTO DATA(lv_msg).
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+
+        ROLLBACK WORK.
+        /scwm/cl_tm=>cleanup( ).
+        ev_error =  abap_true.
+        EXIT.
+      ENDLOOP.
+    ENDIF.
+
+    CHECK ev_error = abap_false.
+
+    CALL FUNCTION '/SCWM/LOADING_INFO_SAVE'
+      EXPORTING
+        iv_commit = ' '.
+
+*-Call BAdI
+    TRY.
+        GET BADI lo_bd_local_upd.
+      CATCH cx_badi_not_implemented.
+        CLEAR lo_bd_local_upd.
+      CATCH cx_badi_multiply_implemented.
+        CLEAR lo_bd_local_upd.
+    ENDTRY.
+*-Update Local line tables
+    IF lo_bd_local_upd IS BOUND.
+      TRY.
+          CALL BADI lo_bd_local_upd->load_hu_upd_local_line
+            EXPORTING
+              is_rfid_input = ms_output_data.
+        CATCH cx_badi_not_implemented  ##NO_HANDLER.
+
+      ENDTRY.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+    /scwm/cl_tm=>cleanup( ).
+
+*-Update Buffer table entries.
+    ms_hdline-current_count += 1.
+    ASSIGN mt_load[ freightorder = ms_output_data-freightorder handlingunit = ms_output_data-handlingunit ] TO FIELD-SYMBOL(<ls_hu>).
+    IF sy-subrc IS INITIAL.
+      <ls_hu>-is_scanned = '+'.
+      <ls_hu>-scan_date = sy-datum.
+      <ls_hu>-scan_time = sy-uzeit.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD update_monitor_buffer.
+
+*-Update Header table
+    IF NOT ms_hdline IS INITIAL.
+      MODIFY /rb4r/lo_hdline FROM ms_hdline.
+      IF sy-subrc <> 0.
+        ROLLBACK WORK.
+      ENDIF.
+    ENDIF.
+
+*-Update Load status table
+    IF NOT mt_load IS INITIAL.
+      MODIFY /rb4r/lo_load_r FROM TABLE mt_load.
+      IF sy-subrc <> 0.
+        ROLLBACK WORK.
+      ENDIF.
+    ENDIF.
+
+*-Update Error HU
+    IF NOT ms_error_hu IS INITIAL.
+
+      IF ms_output_data-direction = mc_dir_out. "Unloading
+        DELETE /rb4r/lo_rfiderr FROM ms_error_hu.
+        IF sy-subrc <> 0.
+          CLEAR: ms_error_hu. "No handling required.
+        ENDIF.
+
+      ELSE. "Loading
+        MODIFY /rb4r/lo_rfiderr FROM ms_error_hu.
+        IF sy-subrc <> 0.
+          CLEAR: ms_error_hu. "No handling required.
+        ENDIF.
+      ENDIF.
+
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+    IF sy-subrc <> 0.
+      ROLLBACK WORK.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD update_unloading_status.
+
+    DATA: lo_bd_local_upd TYPE REF TO /rb4r/lo_bd_rfid_local_upd.
+
+    CLEAR: ev_error, et_bapiret.
+    DATA(lo_log) = NEW /scwm/cl_log( ).
+    TRY.
+        /scwm/cl_sr_bom_dlv=>get_instance( )->set_dlv_hu_load(
+          EXPORTING
+            iv_lgnum          = is_data-warehouseno
+            it_huident        = VALUE #( ( lgnum = is_data-warehouseno huident = is_data-handlingunit ) )
+            iv_sr_dlv_act     = wmesr_act_unload
+            io_log            = lo_log
+          IMPORTING
+            ev_rejected       = ev_error
+            et_return_codes   = DATA(lt_return_code) ).
+
+      CATCH /scwm/cx_sr_error. " Superclass for Exceptions in Shipping/Receiving
+        ev_error = abap_true.
+    ENDTRY.
+
+    DATA(lt_message) = lo_log->get_prot( ).
+    IF ev_error = abap_true OR line_exists( lt_return_code[ failed = abap_true ] ).
+      ev_error = abap_true.
+      ROLLBACK WORK.
+      /scwm/cl_tm=>cleanup( ).
+      et_bapiret = lt_message.
+
+    ELSE.
+      LOOP AT lt_message INTO DATA(ls_message) WHERE type CA 'EA'.
+
+        MESSAGE ID ls_message-id TYPE 'E' NUMBER ls_message-number
+            WITH ls_message-message_v1 ls_message-message_v2
+                 ls_message-message_v3 ls_message-message_v4 INTO DATA(lv_msg).
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+
+        ROLLBACK WORK.
+        /scwm/cl_tm=>cleanup( ).
+        ev_error =  abap_true.
+        EXIT.
+      ENDLOOP.
+    ENDIF.
+
+    CHECK ev_error = abap_false.
+
+    CALL FUNCTION '/SCWM/LOADING_INFO_SAVE'
+      EXPORTING
+        iv_commit = ' '.
+
+*-Call BAdI
+    TRY.
+        GET BADI lo_bd_local_upd.
+      CATCH cx_badi_not_implemented.
+        CLEAR lo_bd_local_upd.
+      CATCH cx_badi_multiply_implemented.
+        CLEAR lo_bd_local_upd.
+    ENDTRY.
+*-Update Local line tables
+    IF lo_bd_local_upd IS BOUND.
+      DATA(ls_rfid_input) = ms_output_data.
+      IF ls_rfid_input-freightorder IS INITIAL.
+        ls_rfid_input-freightorder = ms_hdline-freightorder.
+      ENDIF.
+
+      TRY.
+          CALL BADI lo_bd_local_upd->load_hu_upd_local_line
+            EXPORTING
+              is_rfid_input = ls_rfid_input.
+        CATCH cx_badi_not_implemented  ##NO_HANDLER.
+
+      ENDTRY.
+    ENDIF.
+
+    COMMIT WORK AND WAIT.
+    /scwm/cl_tm=>cleanup( ).
+
+*-Update Buffer table entries.
+    read_hu_ext_number( EXPORTING it_hunumbers = VALUE #( ( hu_exid = ms_output_data-handlingunit ) )
+                        IMPORTING et_huheader  = DATA(lt_hu_erp) ).
+    IF lt_hu_erp IS NOT INITIAL.
+      DATA(lv_erp_hu) = lt_hu_erp[ 1 ]-ext_id_hu_2.
+    ENDIF.
+
+    ms_hdline-current_count -= 1.
+    APPEND INITIAL LINE TO mt_load ASSIGNING FIELD-SYMBOL(<ls_hu>).
+    IF sy-subrc IS INITIAL.
+      <ls_hu>-freightorder     = ms_hdline-freightorder.
+      <ls_hu>-handlingunit     = ms_output_data-handlingunit.
+      <ls_hu>-handlingunit_ext = COND #( WHEN lv_erp_hu IS NOT INITIAL THEN lv_erp_hu
+                                         ELSE ms_output_data-handlingunit ).
+      <ls_hu>-is_scanned       = ' '.
+      <ls_hu>-scan_date        = sy-datum.
+      <ls_hu>-scan_time        = sy-uzeit.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD validatate_data.
+
+    CLEAR: ev_error, et_bapiret, ev_fo_not_released.
+    DATA: lv_msg TYPE bapi_msg.
+
+*-Validate RFID Gate
+    SELECT gate, rfidgate
+      FROM /rb4r/lo_i_rfidgatebasic
+      WHERE lgnum = @is_data-warehouseno
+      AND rfidgate = @is_data-gate
+      INTO TABLE @DATA(lt_gate).
+    IF sy-subrc <> 0.
+      MESSAGE e000(/rb4r/lo_rfid_load) WITH is_data-gate INTO lv_msg.
+      ev_error =  abap_true.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+    ELSEIF lines( lt_gate ) > 1.
+      MESSAGE e001(/rb4r/lo_rfid_load) WITH is_data-gate INTO lv_msg.
+      ev_error =  abap_true.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+    ENDIF.
+
+    CHECK ev_error = abap_false.
+    ms_output_data-gate = lt_gate[ 1 ]-gate.
+
+*-Unloading should be possible for blocked case also;
+*-So FO & Warehouse Gate validation not required;
+    IF ms_output_data-direction = mc_dir_out.
+      RETURN.
+    ENDIF.
+
+*-Read Freight order
+    SELECT
+      transportationorderuuid,
+      transportationorder,
+      transportationorderexecsts,
+      carrier,
+*      \_transportationorderitem[ (*) INNER ]-transportationorderitemuuid,
+*      CAST( \_transportationorderitem[ (*) INNER ]-/rb4c/packageidentifier AS CHAR( 20 ) ) AS hu,
+      \_transportationorderstop[ (*) INNER ]-transpordstopwrhsnmbr  AS warehousenumber,
+      \_transportationorderstop[ (*) INNER ]-transpordstopwrhsdoorid AS gate,
+      \_transportationorderstop[ (*) INNER ]-transpordstopwrhsdoorstatus AS gatestatus
+      FROM i_transportationorder
+      WHERE transportationordercategory = @/scmtms/if_tor_const=>sc_tor_cat_for
+      AND   transpordlifecyclestatus    <> '10' "Canceled
+      AND   transpordlifecyclestatus    <> '05' "Completed
+*      AND \_transportationorderitem[ (*) INNER ]-transporditemcategory   = @/scmtms/if_tor_const=>sc_tor_item_category-packaging
+*      AND \_transportationorderitem[ (*) INNER ]-/rb4c/packageidentifier = @is_data-handlingunit
+*      AND \_transportationorderitem[ (*) INNER ]-ismaincargoitem         = @abap_true
+      AND \_transportationorderstop[ (*) INNER ]-transpordstopwrhsnmbr   = @is_data-warehouseno
+      AND \_transportationorderstop[ (*) INNER ]-transpordstopwrhsdoorid = @ms_output_data-gate
+      AND \_transportationorderstop[ (*) INNER ]-transpordstopcategory   = @/scmtms/if_tor_const=>sc_tor_stop_cat-outbound
+      AND \_transportationorderstop[ (*) INNER ]-transpordstoprole       = @/scmtms/if_tor_const=>sc_tor_stop_role-load_substop
+      INTO TABLE @DATA(lt_tor_fo).
+    IF sy-subrc <> 0.
+      ev_error = abap_true.
+      MESSAGE e002(/rb4r/lo_rfid_load) WITH is_data-handlingunit INTO lv_msg.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      ms_hdline-message = lv_msg.
+      RETURN.
+    ENDIF.
+
+*Freight order status
+    DELETE lt_tor_fo WHERE NOT ( transportationorderexecsts = /scmtms/if_tor_status_c=>sc_root-execution-v_in_execution
+                                 AND gatestatus = 'A' ). "Arrived at door
+    IF lt_tor_fo IS INITIAL.
+      ev_error           = abap_true.
+      ev_fo_not_released = abap_true.
+      MESSAGE e004(/rb4r/lo_rfid_load) INTO lv_msg.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      ms_hdline-message = lv_msg.
+      RETURN.
+    ENDIF.
+
+*Warehouse Gate
+    DATA(ls_tor_fo) = VALUE #( lt_tor_fo[ gate = ms_output_data-gate ] OPTIONAL ).
+    ms_output_data-freightorder = |{ ls_tor_fo-transportationorder ALPHA = OUT }|.
+    IF ms_output_data-freightorder IS INITIAL.
+      ev_error = abap_true.
+      MESSAGE e003(/rb4r/lo_rfid_load) INTO lv_msg.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      ms_hdline-message = lv_msg.
+      RETURN.
+    ENDIF.
+
+*-Carrier
+    mv_carrier = ls_tor_fo-carrier.
+*-Set Last scanned HU UUID
+*    mv_last_scan_hu = ls_Tor_FO-transportationorderitemuuid.
+
+*-Freight order & Door block status
+    TEST-SEAM lp_door.
+      TRY.
+          /scwm/cl_rf_asr=>get_instance( )->/scwm/if_rf_asr~get_lp_door_by_bol(
+            EXPORTING
+              iv_bol         = ms_output_data-freightorder
+              iv_whse_no     = ms_output_data-warehouseno
+              iv_direction   = /scwm/if_af_sr_transport=>sc_direction-outbound
+            IMPORTING
+              et_t_lp_door   = DATA(lt_lp_door)
+              et_lp_fo       = DATA(lt_lp) ).
+
+        CATCH /scwm/cx_rf_asr. " Exception Class for RF Advanced S&R
+          ev_error = abap_true.
+          MESSAGE e008(/rb4r/lo_rfid_load) WITH ms_output_data-freightorder INTO lv_msg.
+          add_message( CHANGING ct_bapiret = et_bapiret ).
+          ms_hdline-message = lv_msg.
+          RETURN.
+      ENDTRY.
+    END-TEST-SEAM.
+
+    IF lt_lp_door IS INITIAL AND lt_lp IS NOT INITIAL.
+      ev_error = abap_true.
+      MESSAGE e166(/scwm/rf_de) INTO lv_msg.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      ms_hdline-message = lv_msg.
+
+    ELSEIF NOT line_exists( lt_lp_door[ door = ms_output_data-gate ] ).
+      ev_error = abap_true.
+      MESSAGE e003(/rb4r/lo_rfid_load) INTO lv_msg.
+      add_message( CHANGING ct_bapiret = et_bapiret ).
+      ms_hdline-message = lv_msg.
+
+    ELSE.
+      mv_lopt = lt_lp_door[ door = ms_output_data-gate ]-unl_point.
+      IF mv_lopt IS INITIAL.
+        ev_error = abap_true.
+        MESSAGE e010(/rb4r/lo_rfid_load) INTO lv_msg WITH ms_output_data-freightorder ms_output_data-gate.
+        add_message( CHANGING ct_bapiret = et_bapiret ).
+        ms_hdline-message = lv_msg.
+      ENDIF.
+    ENDIF.
+
+*-Check HU
+    SELECT transportationorderitemuuid, transportationorderuuid, transporditempackageid
+      FROM i_transportationorderitem
+     WHERE transportationorderuuid = @ls_tor_fo-transportationorderuuid
+       AND transporditemcategory   = @/scmtms/if_tor_const=>sc_tor_item_category-packaging
+       AND transporditempackageid  = @is_data-handlingunit
+       AND ismaincargoitem         = @abap_true
+       INTO TABLE @DATA(lt_tor_hu).
+    IF sy-subrc IS NOT INITIAL.
+      mv_wrong_hu = abap_true.
+    ELSE.
+      mv_last_scan_hu = VALUE #( lt_tor_hu[ 1 ]-transportationorderitemuuid OPTIONAL ).
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
