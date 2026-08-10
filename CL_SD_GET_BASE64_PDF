@@ -1,0 +1,146 @@
+  class /RB1M/CL_SD_GET_BASE64_PDF definition
+  public
+  final
+  create public .
+
+public section.
+
+  methods M_GET_MESSAGETYPE_HU
+    importing
+      !IV_EXIDV type EXIDV
+    exporting
+      !ET_OUTPUT_TYPE type /RB1M/SD_T_OUTPUT_TYPE_PDF
+      !EV_MESSAGE type STRING
+    exceptions
+      NO_VALID_HU_FOUND .
+  methods M_GET_PDF
+    importing
+      !IT_OUTPUT_TYPE type /RB1M/SD_T_OUTPUT_TYPE_PDF
+    exporting
+      !EV_BASE64_PDF type STRING
+      !EV_MESSAGE type STRING
+      !EV_HANDLINGUNIT type EXIDV
+      !EV_MESSAGE_TYPE type SNA_KSCHL
+    exceptions
+      ERROR .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_GET_BASE64_PDF IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_GET_BASE64_PDF->M_GET_MESSAGETYPE_HU
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_EXIDV                       TYPE        EXIDV
+* | [<---] ET_OUTPUT_TYPE                 TYPE        /RB1M/SD_T_OUTPUT_TYPE_PDF
+* | [<---] EV_MESSAGE                     TYPE        STRING
+* | [EXC!] NO_VALID_HU_FOUND
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD m_get_messagetype_hu.
+
+    CLEAR: et_output_type.
+
+* "-- Get Internal handling unit Number
+    SELECT SINGLE handlingunitinternalid,
+                  handlingunitexternalid
+        FROM i_handlingunitheader
+        INTO @DATA(ls_handlingunit)
+        WHERE handlingunitexternalid = @iv_exidv.
+    IF sy-subrc EQ 0.
+
+* "-- Get Output type details for Handling unit number
+      SELECT DISTINCT *
+       FROM /rb1m/sd_i_output
+       INTO  TABLE @DATA(lt_nast_v6)
+       WHERE document = @ls_handlingunit-handlingunitinternalid
+         AND application = 'V6'
+         AND processstatus NE '2'.
+      IF sy-subrc EQ 0.
+
+* "-- Assign output type value to importing structure:
+        et_output_type =  CORRESPONDING #( lt_nast_v6 MAPPING
+                                                    document           = document
+                                                    outputtype         = outputtype
+                                                    application        = application
+                                                    language           = language
+                                                    parner             = parner
+                                                    partnerfunction    = partnerfunction
+                                                    programname        = programname
+                                                    routinename        =  routinename
+                                                    processstatus      =  processstatus
+                                                    transmission       = transmission
+                                                    pdfformname        =  pdfformname
+                                                   ).
+
+      ELSE.
+        DATA(lv_novalid_hu) = abap_true.
+      ENDIF.
+    ELSE.
+      lv_novalid_hu = abap_true.
+    ENDIF.
+
+    IF lv_novalid_hu IS NOT INITIAL.
+      ev_message = TEXT-001.
+      RAISE no_valid_hu_found.
+      CLEAR lv_novalid_hu.
+    ENDIF.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_GET_BASE64_PDF->M_GET_PDF
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IT_OUTPUT_TYPE                 TYPE        /RB1M/SD_T_OUTPUT_TYPE_PDF
+* | [<---] EV_BASE64_PDF                  TYPE        STRING
+* | [<---] EV_MESSAGE                     TYPE        STRING
+* | [<---] EV_HANDLINGUNIT                TYPE        EXIDV
+* | [<---] EV_MESSAGE_TYPE                TYPE        SNA_KSCHL
+* | [EXC!] ERROR
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD m_get_pdf.
+
+    CLEAR: ev_base64_pdf.
+
+    DATA: lo_sd_printout_static TYPE REF TO /rb1m/cl_sd_printout_static,
+          lt_output_type        TYPE STANDARD TABLE OF /rb1m/sd_i_output,
+          ls_output_type        TYPE  /rb1m/sd_i_output,
+          ls_pdf_file           TYPE fpformoutput.
+
+    MOVE-CORRESPONDING it_output_type TO lt_output_type.
+    ls_output_type = lt_output_type[ 1 ].
+    ev_message_type = ls_output_type-outputtype.
+
+    TRY.
+        lo_sd_printout_static = /rb1m/cl_sd_printout_static=>get_instance( ).
+        lo_sd_printout_static->set_key_data( is_key = ls_output_type ).
+
+        PERFORM (ls_output_type-routinename) IN PROGRAM (ls_output_type-programname) USING '' ''.
+        IF sy-subrc EQ 0.
+          ls_pdf_file = lo_sd_printout_static->get_fpformoutput( ).
+
+* "-- Encoded PDF file string to BASE64:
+          cl_http_utility=>if_http_utility~encode_x_base64(
+                  EXPORTING unencoded = ls_pdf_file-pdf
+                  RECEIVING encoded   = ev_base64_pdf ).
+        ENDIF.
+
+        IF lo_sd_printout_static IS BOUND.
+          lo_sd_printout_static->clear_instance( ).
+          CLEAR lo_sd_printout_static.
+        ENDIF.
+
+      CATCH /rb1m/cx_sd_printout_data_exc INTO DATA(lo_exc).
+        IF lo_sd_printout_static IS BOUND.
+          lo_sd_printout_static->clear_key_data( ).
+          lo_sd_printout_static->clear_instance( ).
+          CLEAR lo_sd_printout_static.
+        ENDIF.
+        lo_exc->get_text( RECEIVING result = ev_message ).
+        RAISE error.
+    ENDTRY.
+  ENDMETHOD.
+ENDCLASS.
