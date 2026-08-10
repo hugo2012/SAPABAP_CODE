@@ -1,0 +1,605 @@
+CLASS /rb4r/lo_cl_api_framework DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      BEGIN OF ty_parameter,
+        header_name  TYPE string,
+        header_value TYPE string,
+      END OF ty_parameter .
+    TYPES:
+      tty_paramters TYPE STANDARD TABLE OF ty_parameter .
+    TYPES:
+      BEGIN OF ty_api,
+        main_api  TYPE REF TO /rb4r/lo_cl_rest_api_request,
+        alt_api   TYPE REF TO /rb4r/lo_cl_rest_api_request,
+        loc_id    TYPE werks_d,
+        process   TYPE /rb4r/lo_use_case,
+        method    TYPE /rb4r/lo_method,
+        auth_mode TYPE /rb4r/lo_auth_mode,
+        namespace TYPE 	/aif/ns,
+        ifname    TYPE /aif/ifname,
+        ifver     TYPE  /aif/ifversion,
+      END OF ty_api .
+
+    DATA ms_api TYPE ty_api READ-ONLY .
+    CONSTANTS mc_auth_none TYPE /rb4r/lo_auth_mode VALUE space ##NO_TEXT.
+    CONSTANTS mc_auth_basic TYPE /rb4r/lo_auth_mode VALUE 'B' ##NO_TEXT.
+    CONSTANTS mc_auth_api_key TYPE /rb4r/lo_auth_mode VALUE 'K' ##NO_TEXT.
+    CONSTANTS mc_auth_oauth TYPE /rb4r/lo_auth_mode VALUE 'O' ##NO_TEXT.
+    CONSTANTS mc_messageclass TYPE msgid VALUE '/RB4R/LO_REST_FW' ##NO_TEXT.
+    CONSTANTS mc_param_path TYPE string VALUE '1' ##NO_TEXT.
+    CONSTANTS mc_param_query TYPE string VALUE '2' ##NO_TEXT.
+
+
+    METHODS constructor
+      IMPORTING
+        !iv_plant   TYPE werks_d
+        !iv_service TYPE /rb4r/lo_use_case
+      RAISING
+        /rb4r/lo_cx_rest_frmwrk .
+    "! reads the data fields (from buffered customizing) which have to be replaced with the real data
+    "! in order to send the correct request
+    "!
+    "! @parameter et_body   | table of body content fields
+    "! @parameter et_params | table of parameter content fields
+    METHODS get_data_to_fill
+      EXPORTING
+        !et_body   TYPE /rb4r/lo_api_body_tt
+        !et_params TYPE /rb4r/lo_api_pa_tt .
+    "! updates the data fields which with the corrected values for the actual call
+    "!
+    "! @parameter it_body                  | table of body content fields
+    "! @parameter it_params                | table of parameter content fields
+    "! @raising   /RB4R/LO_CX_REST_FRMWRK | generic exception for REST framework
+    METHODS update_api_data_for_call
+      IMPORTING
+        !it_body   TYPE /rb4r/lo_api_body_tt
+        !it_params TYPE /rb4r/lo_api_pa_tt
+      RAISING
+        /rb4r/lo_cx_rest_frmwrk .
+    "! actually calling the API and exporting the response for handling it within the program flow
+    "!
+    "! @parameter ev_reason                | http status reason
+    "! @parameter ev_code                  | http status code
+    "! @parameter et_response_headers      | http response headers
+    "! @parameter ev_response_body         | http response body
+    "! @raising   /RB4R/LO_CX_REST_FRMWRK | generic exception for REST framework
+    METHODS call_api
+      EXPORTING
+        !ev_reason           TYPE string
+        !ev_code             TYPE numc3
+        !et_response_headers TYPE tihttpnvp
+        !ev_response_body    TYPE string
+        !ev_spool            TYPE rspotitle
+      RAISING
+        /rb4r/lo_cx_rest_frmwrk .
+protected section.
+PRIVATE SECTION.
+  DATA mt_relevant_apis  TYPE STANDARD TABLE OF /rb4r/lo_apis.
+  DATA mt_api_headers    TYPE STANDARD TABLE OF /rb4r/lo_api_hf.
+  DATA mt_api_parameters TYPE STANDARD TABLE OF /rb4r/lo_api_pa.
+  DATA mt_api_body       TYPE STANDARD TABLE OF /rb4r/lo_api_bo.
+*    data mt_api_uri        type standard table of /rb4r/lo_api_uri.
+*    data mt_api_auth       type standard table of /rb4r/lo_api_aut.
+
+
+  METHODS create_url_api
+    IMPORTING is_api          TYPE /rb4r/lo_apis
+    RETURNING VALUE(r_result) TYPE ty_api
+    RAISING   /rb4r/lo_cx_rest_frmwrk.
+
+  METHODS generic_api_creation_steps
+    IMPORTING is_api          TYPE /rb4r/lo_apis
+    EXPORTING ev_alt_api      TYPE REF TO /rb4r/lo_cl_rest_api_request
+              ev_content_type TYPE string
+              ev_api_uri      TYPE /rb4r/lo_uri
+              et_headers      TYPE tihttpnvp
+    RAISING   /rb4r/lo_cx_rest_frmwrk.
+
+  METHODS create_rfcdest_api
+    IMPORTING is_api          TYPE /rb4r/lo_apis
+    RETURNING VALUE(r_result) TYPE ty_api
+    RAISING   /rb4r/lo_cx_rest_frmwrk.
+
+  METHODS generate_auth_headers
+    IMPORTING iv_auth            TYPE /rb4r/lo_auth_mode
+              is_api             TYPE /rb4r/lo_apis
+              iv_username        TYPE string OPTIONAL
+              iv_password        TYPE string OPTIONAL
+              iv_api_key_param   TYPE string OPTIONAL
+              iv_api_key_value   TYPE string OPTIONAL
+              iv_oauth_key       TYPE string OPTIONAL
+              iv_oauth_key_value TYPE string OPTIONAL
+              iv_token_name      TYPE string OPTIONAL
+              iv_token_value     TYPE string OPTIONAL
+    RETURNING VALUE(rt_headers)  TYPE tihttpnvp
+    RAISING   /rb4r/lo_cx_rest_frmwrk.
+
+  METHODS generate_basic_auth_headers
+    IMPORTING iv_password TYPE string
+              iv_username TYPE string
+    EXPORTING et_headers  TYPE tihttpnvp.
+ENDCLASS.
+
+
+
+CLASS /RB4R/LO_CL_API_FRAMEWORK IMPLEMENTATION.
+
+
+  METHOD call_api.
+    DATA lv_initial_loop     TYPE abap_bool VALUE abap_true.
+    DATA lv_code             TYPE numc3.
+    DATA lv_reason           TYPE string.
+    DATA lt_response_headers TYPE tihttpnvp.
+    DATA lv_response_body    TYPE string.
+    DATA ls_textid           TYPE scx_t100key.
+    DATA lt_cookies          TYPE tihttpcki.
+    DATA lv_body             TYPE string.
+
+    " first check if the API is Oauth and fetch the token for the main call
+    IF ms_api-alt_api IS BOUND.
+      DATA(lv_complete_uri) = ms_api-alt_api->mv_uri.
+
+      LOOP AT mt_api_parameters ASSIGNING FIELD-SYMBOL(<fs_param>) WHERE param_mode = mc_param_path." AND odata_get_flag = abap_true.
+        lv_complete_uri = |{ lv_complete_uri }('{ <fs_param>-param_name }={ <fs_param>-param_value }')|.
+      ENDLOOP.
+
+      LOOP AT mt_api_parameters ASSIGNING <fs_param> WHERE param_mode = mc_param_query." AND odata_get_flag = abap_true.
+        IF lv_initial_loop = abap_true.
+          lv_complete_uri = |{ lv_complete_uri }?|.
+          lv_initial_loop = abap_false.
+        ENDIF.
+
+        lv_complete_uri = |{ lv_complete_uri }{ <fs_param>-param_name }={ <fs_param>-param_value }&|.
+      ENDLOOP.
+
+      ms_api-alt_api->set_uri( lv_complete_uri ).
+      " for the GET call all the headers where already generated (Fetch for the token)
+      ms_api-alt_api->set_headers_of_request( ).
+
+      ms_api-alt_api->call_api( EXPORTING iv_timeout          = 60  "changed from 10 seconds to 60 seconds During Wave1b golive
+                                IMPORTING ev_code             = lv_code
+                                          ev_reason           = lv_reason
+                                          et_response_headers = lt_response_headers
+                                          ev_response_body    = lv_response_body
+                                          et_cookies          = lt_cookies ).
+*      IF lv_code CP '2++'.
+*        READ TABLE mt_api_auth ASSIGNING FIELD-SYMBOL(<fs_auth>) WITH KEY location  = ms_api-loc_id
+*                                                                          process   = ms_api-process
+*                                                                          auth_mode = ms_api-auth_mode BINARY SEARCH.
+*        IF sy-subrc IS NOT INITIAL.
+*          RAISE EXCEPTION NEW /rb4r/lo_cx_rest_frmwrk( ).
+*        ENDIF.
+*        SORT lt_response_headers BY name.
+*        READ TABLE lt_response_headers ASSIGNING FIELD-SYMBOL(<fs_response_header>) WITH KEY name = <fs_auth>-oauth_token_para BINARY SEARCH.
+*        IF sy-subrc IS NOT INITIAL.
+*          RAISE EXCEPTION NEW /rb4r/lo_cx_rest_frmwrk( ).
+*        ENDIF.
+
+      " update the token value for the main API
+*        ms_api-main_api->update_specific_header_value( iv_name  = <fs_response_header>-name
+*                                                       iv_value = <fs_response_header>-value ).
+      ms_api-main_api->add_cookies( it_cookies = lt_cookies ).
+
+      " now the fetched token has been added into the headers :)
+      ms_api-main_api->set_headers_of_request( ).
+*      ELSE.
+*        ls_textid = VALUE #( msgid = mc_messageclass
+*                             msgno = '026'
+*                             attr1 = lv_code
+*                             attr2 = lv_reason ). "  API Call returned error &1: &2
+*        DATA(lr_exception) = NEW /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+*        RAISE EXCEPTION lr_exception.
+    ENDIF.
+
+
+    " then build the full URI of the main API Call
+    lv_complete_uri = ms_api-main_api->mv_uri.
+
+    LOOP AT mt_api_parameters ASSIGNING <fs_param> WHERE param_mode = mc_param_path ."AND odata_main_flag = abap_true.
+      lv_complete_uri = |{ lv_complete_uri }/{ <fs_param>-param_name }('{ <fs_param>-param_value }')|.
+    ENDLOOP.
+
+    LOOP AT mt_api_parameters ASSIGNING <fs_param> WHERE param_mode = mc_param_query.
+      IF lv_initial_loop = abap_true.
+        lv_complete_uri = |{ lv_complete_uri }?|.
+        lv_initial_loop = abap_false.
+      ENDIF.
+      IF  <fs_param>-param_value IS NOT INITIAL.
+        lv_complete_uri = |{ lv_complete_uri }{ <fs_param>-param_name }={ <fs_param>-param_value }&|.
+      ENDIF.
+    ENDLOOP.
+
+    IF lv_complete_uri is NOT INITIAL.
+    DATA(lv_length_uri) = strlen( lv_complete_uri ).
+     data(lv_length) = lv_length_uri - 1.
+    IF lv_complete_uri+lv_length(1) = '&'.
+      lv_complete_uri =  lv_complete_uri(lv_length).
+    ENDIF.
+    ms_api-main_api->set_uri( lv_complete_uri ).
+    ms_api-main_api->set_headers_of_request( ).
+
+    IF lines( mt_api_body ) > 0.
+      " now add the body to the request
+      lv_body = '{'.
+      LOOP AT mt_api_body ASSIGNING FIELD-SYMBOL(<fs_body>).
+        lv_body = |{ lv_body }"{ <fs_body>-body_name }": "{ <fs_body>-body_value }",|.
+      ENDLOOP.
+      DATA(lv_len_new) = strlen( lv_body ) - 1.
+      lv_body = lv_body(lv_len_new).
+      lv_body = |{ lv_body }\}|.
+
+      ms_api-main_api->set_body( iv_body = lv_body ).
+    ENDIF.
+
+    ms_api-main_api->call_api( EXPORTING iv_timeout          = 10
+                               IMPORTING ev_code             = ev_code
+                                         ev_reason           = ev_reason
+                                         et_response_headers = et_response_headers
+                                         ev_response_body    = ev_response_body
+                                         eo_http_client  = DATA(lo_http_client)
+                                         ev_spool    =  ev_spool ).
+
+    DATA(ls_return) = /rb4c/cl_ca_aom_enabler=>log(
+                          iv_ns             = ms_api-namespace
+                          iv_ifname         = ms_api-ifname
+                          iv_ifver          = ms_api-ifver
+                          iv_commit         = sy-batch
+                          io_http_client    =  lo_http_client
+                        ).
+    IF ls_return IS NOT INITIAL.
+      MESSAGE ID      ls_return-id
+              TYPE    'S'
+              NUMBER  ls_return-number
+              WITH    ls_return-message_v1
+                      ls_return-message_v2
+                      ls_return-message_v3
+                      ls_return-message_v4.
+    ENDIF.
+
+
+
+    IF ev_code CP '2++'.
+      "in this case we dont need to do anything more here :)
+    ELSE.
+      ls_textid = VALUE #( msgid = mc_messageclass
+                             msgno = '026'
+                             attr1 = ev_code
+                             attr2 = ev_reason
+                             attr3 = ev_response_body ). "  API Call returned error &1: &2
+      DATA(lr_exception) = NEW /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+      RAISE EXCEPTION lr_exception.
+    ENDIF.
+ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD constructor.
+    DATA ls_textid TYPE scx_t100key.
+
+    SELECT werks, srvtype, method, rfcdest, uri,namespace, ifname, ifver
+      FROM /rb4r/lo_apis
+      INTO CORRESPONDING FIELDS OF TABLE @mt_relevant_apis
+      WHERE werks = @iv_plant  AND srvtype = @iv_service.
+    IF sy-subrc IS NOT INITIAL OR lines( mt_relevant_apis ) IS INITIAL.
+      " no data maintained --> no call possible
+      ls_textid = VALUE #( msgid = mc_messageclass
+                           msgno = '016'
+                           attr1 = iv_plant
+                           attr2 = iv_service ). "  no API(s) could be found for werks &1 and process &2
+      DATA(lr_exception) = NEW /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+      RAISE EXCEPTION lr_exception.
+    ENDIF.
+
+    SELECT werks, srvtype, method, header_name, header_value
+      FROM /rb4r/lo_api_hf
+      INTO CORRESPONDING FIELDS OF TABLE @mt_api_headers
+      FOR ALL ENTRIES IN @mt_relevant_apis
+      WHERE werks = @mt_relevant_apis-werks  AND srvtype = @mt_relevant_apis-srvtype AND method = @mt_relevant_apis-method.
+    IF sy-subrc IS NOT INITIAL.
+      " call without headers is unlikely but possible
+    ENDIF.
+
+    SELECT werks, srvtype, method, param_name, param_value, param_mode
+      FROM /rb4r/lo_api_pa
+      INTO CORRESPONDING FIELDS OF TABLE @mt_api_parameters
+      FOR ALL ENTRIES IN @mt_relevant_apis
+      WHERE werks = @mt_relevant_apis-werks  AND  srvtype = @mt_relevant_apis-srvtype AND method = @mt_relevant_apis-method.
+    IF sy-subrc IS NOT INITIAL.
+      " call without parameters is possible
+    ENDIF.
+
+    SELECT werks,srvtype, method, body_name, body_value
+      FROM /rb4r/lo_api_bo
+      INTO CORRESPONDING FIELDS OF TABLE @mt_api_body
+      FOR ALL ENTRIES IN @mt_relevant_apis
+      WHERE werks = @mt_relevant_apis-werks AND srvtype = @mt_relevant_apis-srvtype AND method = @mt_relevant_apis-method.
+    IF sy-subrc IS NOT INITIAL.
+      " call without a body is possible
+    ENDIF.
+    LOOP AT mt_relevant_apis ASSIGNING FIELD-SYMBOL(<fs_api>).
+      ms_api = create_rfcdest_api( is_api = <fs_api> ).
+      ms_api-loc_id = iv_plant.
+      ms_api-process = iv_service.
+      ms_api-namespace = <fs_api>-namespace.
+      ms_api-ifname = <fs_api>-ifname.
+      ms_api-ifver = <fs_api>-ifver.
+      ms_api-process = iv_service.
+      "     ms_api-auth_mode = <fs_api>-auth_mode.
+    ENDLOOP.
+  ENDMETHOD.
+
+
+  METHOD create_rfcdest_api.
+    DATA lv_content_type TYPE string.
+    DATA lt_headers      TYPE tihttpnvp.
+    generic_api_creation_steps( EXPORTING is_api          = is_api
+                                IMPORTING ev_alt_api      = r_result-alt_api
+                                          ev_content_type = lv_content_type
+                                          et_headers      = lt_headers ).
+
+    r_result-main_api = NEW /rb4r/lo_cl_rest_api_request( iv_method       = CONV #( is_api-method )
+                                                           iv_rfc_dest     = is_api-rfcdest
+                                                           iv_content_type = lv_content_type
+                                                           iv_uri          = CONV #( is_api-uri )
+                                                           it_headers      = lt_headers ).
+  ENDMETHOD.
+
+
+  method CREATE_URL_API.
+        data lv_content_type type string.
+    data lt_headers      type tihttpnvp.
+*    data lv_uri          type /rb1m/aid_uri.
+*
+*    generic_api_creation_steps( exporting is_api          = is_api
+*                                importing ev_alt_api      = r_result-alt_api
+*                                          ev_content_type = lv_content_type
+*                                          ev_api_uri      = lv_uri
+*                                          et_headers      = lt_headers ).
+*
+*    r_result-main_api = new /rb1m/aid_cl_rest_api_request( iv_method       = conv #( is_api-method )
+*                                                           iv_url          = conv #( is_api-url )
+*                                                           iv_content_type = lv_content_type
+*                                                           iv_uri          = conv #( lv_uri )
+*                                                           it_headers      = lt_headers ).
+*    r_result-method = is_api-method.
+  endmethod.
+
+
+  method GENERATE_AUTH_HEADERS.
+     data ls_textid    type scx_t100key.
+    data ls_header    type ihttpnvp.
+    data lr_exception type ref to /rb4r/lo_cx_rest_frmwrk.
+
+    case iv_auth.
+      when mc_auth_none.
+
+      when mc_auth_basic.
+        if iv_username is initial or iv_password is initial and is_api-rfcdest is initial. "in case of RFC destination we have the Basic Auth included
+          ls_textid = value #( msgid = mc_messageclass
+                               msgno = '005' ). " for basic auth user and password have to be provided
+          lr_exception = new /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+          raise exception lr_exception.
+        else.
+          generate_basic_auth_headers( exporting iv_password = iv_password
+                                                 iv_username = iv_username
+                                       importing et_headers  = rt_headers ).
+        endif.
+
+      when mc_auth_api_key.
+        if iv_api_key_param is initial or iv_api_key_value is initial.
+          ls_textid = value #( msgid = mc_messageclass
+                               msgno = '009' ). " for API Key Method Key and value have to be provided
+          lr_exception = new /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+          raise exception lr_exception.
+        else.
+          ls_header-name  = iv_api_key_param.
+          ls_header-value = iv_api_key_value.
+          insert ls_header into table rt_headers.
+        endif.
+
+      when mc_auth_oauth.
+        if iv_oauth_key is initial or iv_oauth_key_value is initial or iv_token_name is initial."or iv_token_value is initial.
+          ls_textid = value #( msgid = mc_messageclass
+                               msgno = '010' ). " for oAuth Method minimum Key and value + token name and value have to be provided
+          lr_exception = new /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+          raise exception lr_exception.
+        else.
+          ls_header-name  = iv_oauth_key.
+          ls_header-value = iv_oauth_key_value.
+          insert ls_header into table rt_headers.
+          ls_header-name  = iv_token_name.
+          ls_header-value = iv_token_value.
+          insert ls_header into table rt_headers.
+        endif.
+
+        if iv_username is not initial and iv_password is not initial."in some cases we also need username/password for the oAuth call...
+          generate_basic_auth_headers( exporting iv_password = iv_password
+                                                 iv_username = iv_username
+                                       importing et_headers  = rt_headers ).
+        endif.
+    endcase.
+  endmethod.
+
+
+  method GENERATE_BASIC_AUTH_HEADERS.
+    data lr_base64encoder type ref to cl_http_utility.
+    data ls_header        type ihttpnvp.
+
+    lr_base64encoder = new cl_http_utility( ).
+    data(lv_tpcredentials) = lr_base64encoder->if_http_utility~encode_base64( |{ iv_username }:{ iv_password }| ).
+    ls_header-name  = 'Authorization'.
+    ls_header-value = |Basic { lv_tpcredentials }|.
+    insert ls_header into table et_headers.
+  endmethod.
+
+
+  method GENERIC_API_CREATION_STEPS.
+     data ls_header      type ihttpnvp.
+    data ls_header_alt  type ihttpnvp.
+    data lt_headers_alt type tihttpnvp.
+    data ls_textid      type scx_t100key.
+
+
+ ev_content_type = 'application/json'. "NWt1kor
+
+*    case is_api-content_type.
+*      when 'JSON'.
+*        ev_content_type = 'application/json'.
+*      when 'XML'.
+*        ev_content_type = 'text/xml'.
+*      when others.
+*        " nothing needs to be done --> illegal input can not be maintained....
+*    endcase.
+*
+**    read table mt_api_uri assigning field-symbol(<fs_uri>) with key location = is_api-location
+*                                                                    process  = is_api-process
+*                                                                    method   = is_api-method binary search.
+*    if sy-subrc is not initial.
+*      ls_textid = value #( msgid = mc_messageclass
+*                           msgno = '022'
+*                           attr1 = is_api-location
+*                           attr2 = is_api-process
+*                           attr3 = is_api-method ). " invalid customizing: no URI is maintained for &1 | &2 | &3
+*      data(lr_exception) = new /rb1m/aid_cx_rest_frmwrk( textid = ls_textid ).
+*      raise exception lr_exception.
+*    endif.
+*
+*    ev_api_uri = <fs_uri>-uri.
+*
+*    if is_api-auth_mode <> mc_auth_none.
+*      read table mt_api_auth into data(ls_api_auth) with key location  = is_api-location
+*                                                             process   = is_api-process
+*                                                             method    = is_api-method
+*                                                             auth_mode = is_api-auth_mode binary search.
+*      if sy-subrc is not initial and is_api-rfcdest is initial.
+*        ls_textid = value #( msgid = mc_messageclass
+*                             msgno = '023'
+*                             attr1 = is_api-location
+*                             attr2 = is_api-process
+*                             attr3 = is_api-method
+*                             attr4 = is_api-auth_mode ). " invalid customizing: no Auth params are maintained for &1 | &2 | &3 | &4
+*        lr_exception = new /rb1m/aid_cx_rest_frmwrk( textid = ls_textid ).
+*        raise exception lr_exception.
+*      endif.
+*    endif.
+
+    loop at mt_api_headers assigning field-symbol(<fs_header>) where werks = is_api-werks and srvtype = is_api-srvtype and method = is_api-method.
+      clear: ls_header,
+             ls_header_alt.
+**      if ls_api_auth-auth_mode = mc_auth_oauth.
+**        " for oAuth calls we need 2 calls (one get and one main call - mostly POST or PUT)
+**        if <fs_header>-odata_get_flag = abap_true.
+**          ls_header_alt = value #( name  = <fs_header>-header_name
+**                                   value = <fs_header>-header_value ).
+**          insert ls_header_alt into table lt_headers_alt.
+**        else.
+**        endif.
+**
+**        if <fs_header>-odata_main_flag = abap_true.
+**          if <fs_header>-header_value is not initial.
+**            ls_header = value #( name  = <fs_header>-header_name
+**                                 value = <fs_header>-header_value ).
+**          elseif <fs_header>-response_field is not initial.
+**            ls_header-name = <fs_header>-response_field.
+**          endif.
+*          insert ls_header into table et_headers.
+*        endif.
+*      else.
+        ls_header = value #( name  = <fs_header>-header_name
+                             value = <fs_header>-header_value ).
+        insert ls_header into table et_headers.
+
+    endloop.
+
+*    data(lt_headers) = generate_auth_headers(" iv_auth            = is_api-
+*                                              is_api             = is_api
+*                                              iv_username        = conv #( ls_api_auth-username )
+*                                              iv_password        = conv #( ls_api_auth-password )
+*                                              iv_api_key_param   = conv #( ls_api_auth-api_key_param )
+*                                              iv_api_key_value   = conv #( ls_api_auth-api_key_value )
+*                                              iv_oauth_key       = conv #( ls_api_auth-oauth_key_param )
+*                                              iv_oauth_key_value = conv #( ls_api_auth-oauth_key_value )
+*                                              iv_token_name      = conv #( ls_api_auth-oauth_token_para ) ).
+*    append lines of lt_headers to et_headers.
+
+*    if is_api-auth_mode = mc_auth_oauth. " for oAuth we can only take care of the Fetch call here and the response value(s) have to be mapped afterwards
+*      lt_headers_alt = et_headers.
+*      assign lt_headers_alt[ name = ls_api_auth-oauth_token_para ] to field-symbol(<fs_header_alt>).
+*      if sy-subrc is initial.
+*        <fs_header_alt>-value = 'fetch'.
+*      endif.
+*    endif.
+
+*    if is_api-rfcdest is not initial and <fs_uri>-alt_uri is not initial. " we have an RFC case  " NWt1KOR
+*    if is_api-rfcdest is not initial . " we have an RFC case
+*      ev_alt_api = new /rb4r/lo_cl_rest_api_request( iv_method       = 'GET'
+*                                                      iv_rfc_dest     = is_api-rfcdest
+*                                                      iv_content_type = ev_content_type
+**                                                      iv_uri          = conv #( <fs_uri>-alt_uri )
+*                                                      it_headers      = lt_headers_alt ).
+*    elseif is_api-url is not initial and <fs_uri>-alt_uri is not initial. " we have an url case
+*      ev_alt_api = new /rb1m/aid_cl_rest_api_request( iv_method       = 'GET'
+*                                                      iv_url          = conv #( is_api-url )
+*                                                      iv_content_type = ev_content_type
+*                                                      iv_uri          = conv #( <fs_uri>-alt_uri )
+*                                                      it_headers      = lt_headers_alt ).
+*    endif.
+  endmethod.
+
+
+  method GET_DATA_TO_FILL.
+        loop at mt_api_parameters assigning field-symbol(<fs_parameter>) where param_value cp '$*$'.
+      insert <fs_parameter> into table et_params.
+    endloop.
+
+    loop at mt_api_body assigning field-symbol(<fs_body>) where body_value cp '$*$'.
+      insert <fs_body> into table et_body.
+    endloop.
+  endmethod.
+
+
+  METHOD update_api_data_for_call.
+    DATA ls_textid TYPE scx_t100key.
+
+    IF lines( it_params ) IS NOT INITIAL.
+      DATA(lt_params_tmp) = it_params.
+      SORT lt_params_tmp BY param_name.
+      LOOP AT mt_api_parameters ASSIGNING FIELD-SYMBOL(<fs_parmameter>) WHERE param_value CP '$*$'.
+        READ TABLE lt_params_tmp ASSIGNING FIELD-SYMBOL(<fs_params_new>) WITH KEY param_name = <fs_parmameter>-param_name BINARY SEARCH.
+        IF sy-subrc IS NOT INITIAL.
+          ls_textid = VALUE #( msgid = mc_messageclass
+                               msgno = '024'
+                               attr1 = <fs_parmameter>-param_name ). " invalid call: parameter &1 was not supplied
+          DATA(lr_exception) = NEW /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+          RAISE EXCEPTION lr_exception.
+        ENDIF.
+        " update the parameter with the new value :)
+        <fs_parmameter>-param_value = <fs_params_new>-param_value.
+      ENDLOOP.
+    ENDIF.
+
+    IF lines( it_body ) IS NOT INITIAL.
+      DATA(lt_body_tmp)  = it_body.
+      SORT lt_body_tmp BY body_name.
+
+      LOOP AT mt_api_body ASSIGNING FIELD-SYMBOL(<fs_body>) WHERE body_value CP '$*$'.
+        READ TABLE lt_body_tmp ASSIGNING FIELD-SYMBOL(<fs_body_new>) WITH KEY body_name = <fs_body>-body_name BINARY SEARCH.
+        IF sy-subrc IS NOT INITIAL.
+          ls_textid = VALUE #( msgid = mc_messageclass
+                               msgno = '025'
+                               attr1 = <fs_body>-body_name ). " invalid call: body value &1 was not supplied
+          lr_exception = NEW /rb4r/lo_cx_rest_frmwrk( textid = ls_textid ).
+          RAISE EXCEPTION lr_exception.
+        ENDIF.
+        " update the parameter with the new value :)
+        <fs_body>-body_value = <fs_body_new>-body_value.
+      ENDLOOP.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
