@@ -1,0 +1,167 @@
+  method /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_DEEP_ENTITY.
+
+    DATA : ls_payloaddata TYPE /rb1m/cl_sd_mass_outpu_mpc_ext=>ts_deep_entity.
+    DATA : ls_return      TYPE /rb1m/cl_sd_mass_outpu_mpc_ext=>ts_deep_entity.
+    DATA : ls_hu_detail   TYPE /rb1m/sd_s_mass_ouput_hu_item.
+    DATA : lo_message_container TYPE REF TO /iwbep/if_message_container.
+* "-- LOCAL DATA DECLARATION:
+    DATA   : ls_input        TYPE /rb1m/sd_s_mass_ouput_proc_hu,
+             lv_message      TYPE string,
+             lv_message_bapi TYPE bapi_msg,
+             lv_exidv        TYPE exidv.
+    DATA: lo_sd_customerhu_static TYPE REF TO /rb1m/cl_sd_export_customerhu.
+
+    TRY.
+* "----------------------------------------------------------------------" *
+        "Get deep entity data from service
+        io_data_provider->read_entry_data(
+            IMPORTING
+              es_data = ls_payloaddata
+          ).
+
+        CHECK ls_payloaddata  IS NOT INITIAL.
+
+* "-- Convert input data
+        ls_input = CORRESPONDING #( ls_payloaddata  ).
+        CASE ls_input-printout_flag.
+          WHEN 'P'.
+* "-- Call function module with the logic
+            CALL FUNCTION '/RB1M/SD_MASS_V6_OUTPUT_PROCES'
+              EXPORTING
+                iv_exidv                  = ls_input-handlingunitno
+                iv_kschl                  = ls_input-outputtype
+                iv_printername            = ls_input-printername
+                iv_printertype            = ls_input-printertype
+                iv_printsubhus            = ls_input-printsubhus
+                iv_vermo                  = ls_input-processingmode
+              IMPORTING
+                ev_message                = lv_message
+              EXCEPTIONS
+                no_hu_found               = 1
+                no_printer_found          = 2
+                no_outputs_selected       = 3
+                no_outputs_processed      = 4
+                not_all_outputs_processed = 5.
+*    Answer processing
+            IF sy-subrc NE 0. "error
+              lv_message_bapi = lv_message.
+              lo_message_container = me->mo_context->get_message_container( ).
+               lo_message_container->add_message_text_only(
+                 EXPORTING
+                   iv_msg_type               = 'E'
+                   iv_msg_text               = lv_message_bapi
+                   iv_add_to_response_header = abap_true
+               ).
+              RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+                EXPORTING
+                  textid  = /iwbep/cx_mgw_busi_exception=>business_error
+                  message = lv_message_bapi.
+              CLEAR: lv_message_bapi, lv_message.
+            ELSE.
+              ls_return-printsubhus    = ls_input-printsubhus.
+              ls_return-printername    = ls_input-printername.
+              ls_return-handlingunitno = ls_input-handlingunitno.
+              ls_return-processingmode = ls_input-processingmode.
+              ls_return-message        = lv_message.
+              ls_return-printout_flag = ls_input-printout_flag.
+              ls_return-outputtype    = ls_input-outputtype.
+            ENDIF.
+          WHEN 'F'.
+
+            lv_exidv = ls_input-handlingunitno.
+* "-- Convert PDF value to Base64 and send it as a response.
+            DATA(lo_object) = NEW /rb1m/cl_sd_get_base64_pdf( ).
+
+* "-- Get Message type and Driver Program Details:
+            CLEAR lv_message.
+            lo_object->m_get_messagetype_hu(
+              EXPORTING
+                iv_exidv       =    lv_exidv            " External Handling Unit Identification
+              IMPORTING
+                et_output_type = DATA(lt_output_type)   " Table type of output type
+                ev_message     = lv_message
+              EXCEPTIONS
+                no_valid_hu_found = 1 ).
+            IF sy-subrc NE 0.
+               lv_message_bapi = lv_message.
+               lo_message_container = me->mo_context->get_message_container( ).
+               lo_message_container->add_message_text_only(
+                 EXPORTING
+                   iv_msg_type               = 'E'
+                   iv_msg_text               = lv_message_bapi
+                   iv_add_to_response_header = abap_true
+               ).
+              RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+                EXPORTING
+                  textid  = /iwbep/cx_mgw_busi_exception=>business_error
+                  message = lv_message_bapi.
+              CLEAR: lv_message_bapi, lv_message.
+
+              ENDIF.
+* "-- Get Base 64 Converted PDF value:
+              lo_object->m_get_pdf(
+                EXPORTING
+                  it_output_type = lt_output_type          " Table type of output type
+                IMPORTING
+                  ev_base64_pdf  = DATA(lv_base64_pdf)     " Encoded base64 value for PDF
+                  ev_message     = lv_message
+                  ev_message_type = DATA(lv_outputtype)
+                EXCEPTIONS
+                  error = 1 ).
+              IF sy-subrc NE 0.
+                lv_message_bapi = lv_message.
+                lo_message_container = me->mo_context->get_message_container( ).
+                lo_message_container->add_message_text_only(
+                 EXPORTING
+                   iv_msg_type               = 'E'
+                   iv_msg_text               = lv_message_bapi
+                   iv_add_to_response_header = abap_true
+               ).
+
+                RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+                  EXPORTING
+                    textid  = /iwbep/cx_mgw_busi_exception=>business_error
+                    message = lv_message_bapi.
+
+                CLEAR: lv_message_bapi, lv_message.
+              ELSE.
+* "-- Send Response to output:
+                ls_return-handlingunitno = ls_input-handlingunitno.
+                ls_return-outputtype = lv_outputtype.
+                ls_return-base64_pdfvalue = lv_base64_pdf.
+                ls_return-printout_flag = ls_input-printout_flag.
+              ENDIF.
+           " ENDIF.
+        ENDCASE.
+* Begin
+
+        lo_sd_customerhu_static = /rb1m/cl_sd_export_customerhu=>get_instance( ).
+        CALL METHOD lo_sd_customerhu_static->get_hunumber_data
+          IMPORTING
+            et_customerhunumber =  DATA(lt_customerhunumber).
+        IF lt_customerhunumber IS NOT INITIAL.
+          LOOP AT lt_customerhunumber ASSIGNING FIELD-SYMBOL(<lfs_custhunumber>).
+            ls_hu_detail-customer_hunumber = <lfs_custhunumber>-customerhunumber.
+            APPEND ls_hu_detail TO ls_return-handlingunittodetailnav.
+          ENDLOOP.
+        ENDIF.
+* End
+
+* For converting the data in the deep structure to the output format
+          CALL METHOD copy_data_to_ref
+            EXPORTING
+              is_data = ls_return
+            CHANGING
+              cr_data = er_deep_entity.
+"          lo_message_container = me->mo_context->get_message_container( ).
+"          lo_message_container->add_message_text_only(
+"           EXPORTING
+"             iv_msg_type               = 'S'
+"             iv_msg_text               = '201 - Success'
+"             iv_add_to_response_header = abap_true
+"         ).
+
+      CATCH /iwbep/cx_mgw_busi_exception.
+      CATCH /iwbep/cx_mgw_tech_exception.
+    ENDTRY.
+  endmethod.
