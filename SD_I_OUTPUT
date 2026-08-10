@@ -1,0 +1,33 @@
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'CDS View for Output of Message Type'
+@Metadata.ignorePropagatedAnnotations: true
+@ObjectModel.usageType:{
+    serviceQuality: #X,
+    sizeCategory: #S,
+    dataClass: #MIXED
+}
+define view entity /RB1M/SD_I_OUTPUT as select from nast
+    left outer join tnapr on    nast.kappl = tnapr.kappl
+                          and   nast.kschl = tnapr.kschl
+    left outer join t685t on    nast.kappl = t685t.kappl
+                          and   nast.kschl = t685t.kschl
+                          and   t685t.spras = $session.system_language                      
+{
+    key nast.kschl as OutputType,
+    key nast.kappl as Application,
+    key nast.objky as Document,
+    key nast.objky as CODocument,
+    key nast.spras as Language,
+    key nast.parnr as Parner,
+    key nast.parvw as PartnerFunction,
+    nast.nacha     as Medium,
+    tnapr.pgnam    as ProgramName,
+    t685t.vtext    as Description,
+    nast.nacha     as Transmission,
+    nast.vstat     as ProcessStatus,
+    tnapr.sform    as PDFFormName,
+    tnapr.ronam    as RoutineName,
+    tnapr.formtype as FormType
+    
+} where nast.nacha = '1'
