@@ -1,0 +1,627 @@
+class /RB1M/CL_SD_RFID_DATA definition
+  public
+  create public .
+
+public section.
+
+  interfaces /RB1M/IF_SD_RFID_DATA .
+
+  constants MV_SERVICETYPE_INTERNAL type /RB1M/SD_USE_CASE value 'INTERNALHU' ##NO_TEXT.
+  constants MV_SERVICETYPE_EXTERNAL type /RB1M/SD_USE_CASE value 'EXTERNALHU' ##NO_TEXT.
+
+  methods GET_INTERNAL_RESPONSE
+    importing
+      !IS_DATA type /RB1M/SD_INT_REQ
+      !IV_NAMESPACE type /AIF/NS default 'APIOUT'
+      !IV_IFNAME type /AIF/IFNAME default 'ZRFID_OUT'
+      !IV_IFVER type /AIF/IFVERSION default '1'
+      !IV_PLANT type HUM_WERKS
+    exporting
+      !ES_RESPONSE type STRING
+      !ES_MSG type STRING .
+  methods GET_EXTERNAL_RESPONSE
+    importing
+      !IV_PLANT type HUM_WERKS
+      !IS_DATA type /RB1M/SD_EXT_REQ
+      !IV_NAMESPACE type /AIF/NS default 'APIOUT'
+      !IV_IFNAME type /AIF/IFNAME default 'ZRFID_OUT'
+      !IV_IFVER type /AIF/IFVERSION default '1'
+    exporting
+      !ES_RESPONSE type STRING
+      !ES_MSG type STRING .
+  methods GET_DEVICE_NAME
+    importing
+      !IV_DEVICEID type RSPOPSHORT
+    exporting
+      !ES_DEVICENAME type RSPOLNAME .
+  methods GET_RFC_DEST
+    importing
+      !IV_SRVTYP type /RB1M/SD_USE_CASE default 'INTERNAL'
+      !IV_PLANT type WERKS_D
+    exporting
+      !ES_RFC_DEST type RFCDEST .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS /RB1M/CL_SD_RFID_DATA IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_RFID_DATA->GET_DEVICE_NAME
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_DEVICEID                    TYPE        RSPOPSHORT
+* | [<---] ES_DEVICENAME                  TYPE        RSPOLNAME
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_device_name.
+    "Get device name on basis of device id
+    SELECT SINGLE name
+      INTO es_devicename
+      FROM tsp03d
+      WHERE padest = iv_deviceid.
+
+    IF sy-subrc NE 0.
+      CLEAR es_devicename.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_RFID_DATA->GET_EXTERNAL_RESPONSE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_PLANT                       TYPE        HUM_WERKS
+* | [--->] IS_DATA                        TYPE        /RB1M/SD_EXT_REQ
+* | [--->] IV_NAMESPACE                   TYPE        /AIF/NS (default ='APIOUT')
+* | [--->] IV_IFNAME                      TYPE        /AIF/IFNAME (default ='ZRFID_OUT')
+* | [--->] IV_IFVER                       TYPE        /AIF/IFVERSION (default ='1')
+* | [<---] ES_RESPONSE                    TYPE        STRING
+* | [<---] ES_MSG                         TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_external_response.
+
+    DATA: lv_url TYPE string.
+    DATA: lo_http_client TYPE REF TO if_http_client.
+    DATA: lo_rest_client TYPE REF TO cl_rest_http_client.
+    DATA: r_json TYPE string.
+    DATA: lt_fields TYPE tihttpnvp.
+    DATA: lv_param TYPE string.
+    DATA : lv_regex TYPE string VALUE '["Spool":"{}]'.
+
+    CHECK is_data-deviceid IS NOT INITIAL AND is_data-deviceid CS '_RFID'.
+
+    "Get the RFC Destination
+    me->get_rfc_dest(
+      EXPORTING
+        iv_srvtyp   = 'EXTERNAL'       " Service type
+        iv_plant    =  iv_plant                 " Plant
+      IMPORTING
+        es_rfc_dest = DATA(lv_rfc_dest)                 " RFC Destination
+    ).
+
+    "Fetching resposnse and Filling the AIF structures
+    IF sy-subrc EQ 0 AND lv_rfc_dest IS NOT INITIAL.
+      DATA(lv_sid) = sy-sysid && sy-mandt.
+      CONDENSE lv_sid.
+      lv_param = |?shipping_point={ is_data-shipping_point }&material={ is_data-material }&customer={ is_data-customer }&hu_no={ is_data-hu_no }&exidv2={ is_data-exidv2 }&deviceID={ is_data-deviceid }&output_type={ is_data-output_type }&SID={ lv_sid } |.
+      lv_url = lv_param.
+
+      " Create http client using destination
+      CALL METHOD cl_http_client=>create_by_destination
+        EXPORTING
+          destination                = lv_rfc_dest                " Logical destination (specified in function call)
+        IMPORTING
+          client                     = lo_http_client                 " HTTP Client Abstraction
+        EXCEPTIONS
+          argument_not_found         = 1                " Connection parameter (destination) not available
+          destination_not_found      = 2                " Destination was not found
+          destination_no_authority   = 3                " No Authorization to Use HTTP Destination
+          plugin_not_active          = 4                " HTTP/HTTPS communication not available
+          internal_error             = 5                " Internal error (e.g. name too long)
+          oa2c_set_token_error       = 6                " General error when setting the OAuth token
+          oa2c_missing_authorization = 7
+          oa2c_invalid_config        = 8
+          oa2c_invalid_parameters    = 9
+          oa2c_invalid_scope         = 10
+          oa2c_invalid_grant         = 11
+          OTHERS                     = 12.
+      IF sy-subrc <> 0.
+
+      ENDIF.
+
+      "Setting the request URI
+      CALL METHOD cl_http_utility=>set_request_uri
+        EXPORTING
+          request = lo_http_client->request                 " HTTP Framework (iHTTP) HTTP Request
+          uri     = lv_url.                 " URI String (in the Form of /path?query-string)
+
+      "Disable logon pop-up
+      lo_http_client->propertytype_logon_popup = lo_http_client->co_disabled.
+      lo_http_client->request->set_method( 'GET' ).
+
+      "Header Body
+      lo_http_client->request->set_header_fields( VALUE #(
+
+    ( name  = 'Content-Type'    value = 'application/json')
+    ( name = 'Accept'           value = 'application/json' )
+*    ( name  = 'Authorization'          value = 'Basic Q1RfMzAwMDpTT05OVEFHMQ==')
+    ) ).
+
+      "Request Body
+      lt_fields = VALUE #( ( name  = 'shipping_point'  value = is_data-shipping_point )
+                           ( name  = 'material'        value = is_data-material )
+                           ( name  = 'customer'        value = is_data-customer )
+                           ( name  = 'hu_no'           value = is_data-hu_no )
+                           ( name  = 'deviceID'        value = is_data-deviceid )
+                           ( name  = 'exidv2'          value = is_data-exidv2 )
+                           ( name  = 'output_type'     value = is_data-output_type )
+                           ( name  = 'SID'             value = lv_sid ) ).
+
+      lo_http_client->request->set_form_fields( lt_fields ).
+
+      TRY.
+          lo_http_client->send(
+            EXPORTING
+              timeout = 30
+            EXCEPTIONS
+              http_communication_failure = 1
+              OTHERS                     = 2
+          ).
+          IF sy-subrc <> 0.
+            lo_http_client->get_last_error(
+              IMPORTING message = DATA(lv_snd_msg) ).
+            es_msg = lv_snd_msg.
+          ENDIF.
+          lo_http_client->receive(
+            EXCEPTIONS
+              http_communication_failure = 1
+              OTHERS                     = 2
+          ).
+          IF sy-subrc <> 0.
+            lo_http_client->get_last_error(
+              IMPORTING message = DATA(lv_rcv_msg) ).
+            es_msg = lv_rcv_msg.
+          ENDIF.
+
+          r_json = lo_http_client->response->get_cdata( ).
+
+        CATCH cx_root INTO DATA(lo_exception).
+          DATA(lv_msg) = lo_exception->get_text(  ).
+          es_msg = lv_msg.
+      ENDTRY.
+      " Get Status
+      lo_http_client->response->get_status(
+        IMPORTING
+          code   =  DATA(lv_scode)                " HTTP Status Code
+          reason =  DATA(lv_reson)                " HTTP status description
+      ).
+      IF lv_snd_msg IS INITIAL AND lv_rcv_msg IS INITIAL AND lv_msg IS INITIAL AND lv_scode = '200'.
+        REPLACE ALL OCCURRENCES OF REGEX lv_regex IN r_json WITH ''.
+        es_response = r_json.
+      ELSE.
+        "Response if some error occurs while calling the service
+        es_response =   |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+      ENDIF.
+
+      DATA(ls_return) = /rb4c/cl_ca_aom_enabler=>log(
+                          iv_ns             =  iv_namespace
+                          iv_ifname         = iv_ifname
+                          iv_ifver          = iv_ifver
+                          iv_commit         = sy-batch
+                          io_http_client    = lo_http_client
+                        ).
+      IF ls_return IS NOT INITIAL.
+        MESSAGE ID      ls_return-id
+                TYPE    'S'
+                NUMBER  ls_return-number
+                WITH    ls_return-message_v1
+                        ls_return-message_v2
+                        ls_return-message_v3
+                        ls_return-message_v4.
+      ENDIF.
+
+    ELSE.
+
+      "Response if RFC destination is not maintained in custom table
+      es_response =   |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_RFID_DATA->GET_INTERNAL_RESPONSE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_DATA                        TYPE        /RB1M/SD_INT_REQ
+* | [--->] IV_NAMESPACE                   TYPE        /AIF/NS (default ='APIOUT')
+* | [--->] IV_IFNAME                      TYPE        /AIF/IFNAME (default ='ZRFID_OUT')
+* | [--->] IV_IFVER                       TYPE        /AIF/IFVERSION (default ='1')
+* | [--->] IV_PLANT                       TYPE        HUM_WERKS
+* | [<---] ES_RESPONSE                    TYPE        STRING
+* | [<---] ES_MSG                         TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_internal_response.
+
+    DATA: lv_url TYPE string.
+    DATA: lo_http_client TYPE REF TO if_http_client.
+    DATA: lo_rest_client TYPE REF TO cl_rest_http_client.
+    DATA: r_json TYPE string.
+    DATA: lt_fields TYPE tihttpnvp.
+    DATA: lv_param TYPE string.
+    DATA : lv_regex TYPE string VALUE '["Spool":"{}]'.
+
+    CHECK is_data-deviceid IS NOT INITIAL AND is_data-deviceid CS '_RFID'.
+
+    "Get the RFC Destination
+    me->get_rfc_dest(
+      EXPORTING
+        iv_srvtyp   = 'INTERNAL'       " Service type
+        iv_plant    =  iv_plant                 " Plant
+      IMPORTING
+        es_rfc_dest = DATA(lv_rfc_dest)                 " RFC Destination
+    ).
+
+    "Fetching resposnse and Filling the AIF structures
+    IF sy-subrc EQ 0 AND lv_rfc_dest IS NOT INITIAL.
+      DATA(lv_sid) = sy-sysid && sy-mandt.
+      CONDENSE lv_sid.
+      lv_param = |?plant={ iv_plant }&material={ is_data-material }&pack_mat{ is_data-pack_mat }&hu_no={ is_data-hu_no }&exidv2={ is_data-exidv2 }&deviceID={ is_data-deviceid }&output_type={ is_data-output_type }&SID={ lv_sid } |.
+      lv_url = lv_param.
+
+      " Create http client using destination
+      CALL METHOD cl_http_client=>create_by_destination
+        EXPORTING
+          destination                = lv_rfc_dest                " Logical destination (specified in function call)
+        IMPORTING
+          client                     = lo_http_client                 " HTTP Client Abstraction
+        EXCEPTIONS
+          argument_not_found         = 1                " Connection parameter (destination) not available
+          destination_not_found      = 2                " Destination was not found
+          destination_no_authority   = 3                " No Authorization to Use HTTP Destination
+          plugin_not_active          = 4                " HTTP/HTTPS communication not available
+          internal_error             = 5                " Internal error (e.g. name too long)
+          oa2c_set_token_error       = 6                " General error when setting the OAuth token
+          oa2c_missing_authorization = 7
+          oa2c_invalid_config        = 8
+          oa2c_invalid_parameters    = 9
+          oa2c_invalid_scope         = 10
+          oa2c_invalid_grant         = 11
+          OTHERS                     = 12.
+      IF sy-subrc <> 0.
+
+      ENDIF.
+
+      "Setting the request URI
+      CALL METHOD cl_http_utility=>set_request_uri
+        EXPORTING
+          request = lo_http_client->request                 " HTTP Framework (iHTTP) HTTP Request
+          uri     = lv_url.                 " URI String (in the Form of /path?query-string)
+
+      "Disable logon pop-up
+      lo_http_client->propertytype_logon_popup = lo_http_client->co_disabled.
+      lo_http_client->request->set_method( 'GET' ).
+
+      "Header Body
+      lo_http_client->request->set_header_fields( VALUE #(
+
+    ( name  = 'Content-Type'    value = 'application/json')
+    ( name = 'Accept'           value = 'application/json' )
+*    ( name  = 'Authorization'          value = 'Basic Q1RfMzAwMDpTT05OVEFHMQ==')
+    ) ).
+
+      "Request Body
+      lt_fields = VALUE #( ( name  = 'plant'  value = iv_plant )
+                           ( name  = 'material'        value = is_data-material )
+                           ( name  = 'pack_mat'        value = is_data-pack_mat )
+                           ( name  = 'hu_no'           value = is_data-hu_no )
+                           ( name  = 'deviceID'        value = is_data-deviceid )
+                           ( name  = 'exidv2'          value = is_data-exidv2 )
+                           ( name  = 'output_type'     value = is_data-output_type )
+                           ( name  = 'SID'             value = lv_sid ) ).
+
+      lo_http_client->request->set_form_fields( lt_fields ).
+
+      TRY.
+          lo_http_client->send(
+            EXPORTING
+              timeout = 30
+            EXCEPTIONS
+              http_communication_failure = 1
+              OTHERS                     = 2
+          ).
+          IF sy-subrc <> 0.
+            lo_http_client->get_last_error(
+              IMPORTING message = DATA(lv_snd_msg) ).
+            es_msg = lv_snd_msg.
+          ENDIF.
+          lo_http_client->receive(
+            EXCEPTIONS
+              http_communication_failure = 1
+              OTHERS                     = 2
+          ).
+          IF sy-subrc <> 0.
+            lo_http_client->get_last_error(
+              IMPORTING message = DATA(lv_rcv_msg) ).
+            es_msg = lv_rcv_msg.
+          ENDIF.
+
+          r_json = lo_http_client->response->get_cdata( ).
+
+        CATCH cx_root INTO DATA(lo_exception).
+          DATA(lv_msg) = lo_exception->get_text(  ).
+          es_msg = lv_msg.
+      ENDTRY.
+      " Get Status
+      lo_http_client->response->get_status(
+        IMPORTING
+          code   =  DATA(lv_scode)                " HTTP Status Code
+          reason =  DATA(lv_reson)                " HTTP status description
+      ).
+      IF lv_snd_msg IS INITIAL AND lv_rcv_msg IS INITIAL AND lv_msg IS INITIAL AND lv_scode = '200'.
+        REPLACE ALL OCCURRENCES OF REGEX lv_regex IN r_json WITH ''.
+        es_response = r_json.
+      ELSE.
+        "Response if some error occurs while calling the service
+        es_response =   |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+      ENDIF.
+
+      DATA(ls_return) = /rb4c/cl_ca_aom_enabler=>log(
+                          iv_ns             =  iv_namespace
+                          iv_ifname         = iv_ifname
+                          iv_ifver          = iv_ifver
+                          iv_commit         = sy-batch
+                          io_http_client    = lo_http_client
+                        ).
+      IF ls_return IS NOT INITIAL.
+        MESSAGE ID      ls_return-id
+                TYPE    'S'
+                NUMBER  ls_return-number
+                WITH    ls_return-message_v1
+                        ls_return-message_v2
+                        ls_return-message_v3
+                        ls_return-message_v4.
+      ENDIF.
+
+    ELSE.
+
+      "Response if RFC destination is not maintained in custom table
+      es_response =   |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_RFID_DATA->GET_RFC_DEST
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_SRVTYP                      TYPE        /RB1M/SD_USE_CASE (default ='INTERNAL')
+* | [--->] IV_PLANT                       TYPE        WERKS_D
+* | [<---] ES_RFC_DEST                    TYPE        RFCDEST
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD GET_RFC_DEST.
+    "getting service endpoint from the custom table
+    SELECT SINGLE RFCDEST
+      INTO es_rfc_dest
+       FROM /rb1m/sd_service
+       WHERE werks = iv_plant
+       AND srvtype = iv_srvtyp.
+
+    IF sy-subrc NE 0.
+      CLEAR es_rfc_dest.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_RFID_DATA->/RB1M/IF_SD_RFID_DATA~CALL_API_EXTERNAL_RESPONSE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_DATA                        TYPE        /RB1M/SD_EXT_REQ
+* | [--->] IV_PLANT                       TYPE        HUM_WERKS
+* | [<---] ES_RESPONSE                    TYPE        STRING
+* | [<---] ES_MSG                         TYPE        STRING
+* | [<---] EV_SPOOL                       TYPE        RSPOTITLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method /RB1M/IF_SD_RFID_DATA~CALL_API_EXTERNAL_RESPONSE.
+
+   DATA :lv_printername TYPE rspolname.
+
+    CHECK is_data IS NOT INITIAL.
+
+    CALL FUNCTION 'CONVERSION_EXIT_SPDEV_OUTPUT'
+      EXPORTING
+        input  = is_data-deviceid
+      IMPORTING
+        output = lv_printername.
+
+    IF lv_printername CS '_RFID'.
+      TRY.
+          DATA(lr_framework) = NEW /rb4r/lo_cl_api_framework( iv_plant = iv_plant
+                                                              iv_service = mv_servicetype_external ).
+          lr_framework->get_data_to_fill( IMPORTING et_body = DATA(lt_body) et_params = DATA(lt_params) ).
+          DATA(lv_sid) = sy-sysid && sy-mandt.
+          CONDENSE lv_sid.
+          LOOP AT lt_params ASSIGNING FIELD-SYMBOL(<fs_param>) WHERE param_value CP '$*$'.
+            CASE <fs_param>-param_name.
+              WHEN 'customer'.
+                <fs_param>-param_value = is_data-customer.
+              WHEN 'material'.
+                <fs_param>-param_value  = is_data-material.
+              WHEN 'hu_no'.
+                <fs_param>-param_value = is_data-hu_no.
+              WHEN 'deviceID'.
+                 <fs_param>-param_value = lv_printername.
+              WHEN 'SID'.
+                <fs_param>-param_value = lv_sid.
+              WHEN 'exidv2'.
+                <fs_param>-param_value = is_data-exidv2.
+              WHEN 'output_type'.
+                <fs_param>-param_value = is_data-output_type.
+              WHEN 'shipping_point'.
+                <fs_param>-param_value = is_data-shipping_point.
+              WHEN 'plant'.
+                <fs_param>-param_value = iv_plant.
+              WHEN OTHERS.
+            ENDCASE.
+          ENDLOOP.
+          TRY.
+              lr_framework->update_api_data_for_call( it_body = lt_body it_params = lt_params ).
+              lr_framework->call_api(
+                IMPORTING
+                  ev_reason           = DATA(lv_reason)
+                  ev_code             = DATA(lv_code)
+                  et_response_headers = DATA(lt_header)
+                  ev_response_body    = DATA(lv_response_body)
+                  ev_spool  = DATA(lv_spool)
+              ).
+            CATCH /rb4r/lo_cx_rest_frmwrk INTO DATA(lr_exception).
+              DATA(lv_exception) = lr_exception->get_longtext( ).
+          ENDTRY.
+
+        CATCH   /rb4r/lo_cx_rest_frmwrk INTO lr_exception.
+          lv_exception = lr_exception->get_longtext( ).
+      ENDTRY.
+
+      IF sy-subrc NE 0.
+        RETURN.
+      ELSE.
+        IF lv_code = '200'. "ok
+          ev_spool = COND #( WHEN lv_spool IS NOT INITIAL THEN lv_spool ELSE '').
+          es_msg = COND #( WHEN lv_code IS NOT INITIAL THEN lv_code ELSE '').
+          es_response =  COND #(  WHEN lv_response_body IS NOT INITIAL THEN lv_response_body ELSE '' ).
+        ELSE.
+          es_response =  |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+          ev_spool =   |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_RFID_DATA->/RB1M/IF_SD_RFID_DATA~CALL_API_INTERNAL_RESPONSE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_DATA                        TYPE        /RB1M/SD_INT_REQ
+* | [--->] IV_PLANT                       TYPE        HUM_WERKS
+* | [<---] ES_RESPONSE                    TYPE        STRING
+* | [<---] ES_MSG                         TYPE        STRING
+* | [<---] EV_SPOOL                       TYPE        RSPOTITLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method /RB1M/IF_SD_RFID_DATA~CALL_API_INTERNAL_RESPONSE.
+
+    DATA :lv_printername TYPE rspolname.
+
+    CHECK is_data IS NOT INITIAL.
+
+    CALL FUNCTION 'CONVERSION_EXIT_SPDEV_OUTPUT'
+      EXPORTING
+        input  = is_data-deviceid
+      IMPORTING
+        output = lv_printername.
+
+    IF lv_printername CS '_RFID'.
+      TRY.
+          DATA(lr_framework) = NEW /rb4r/lo_cl_api_framework( iv_plant = iv_plant
+                                                              iv_service = mv_servicetype_internal ).
+          lr_framework->get_data_to_fill( IMPORTING et_body = DATA(lt_body) et_params = DATA(lt_params) ).
+          DATA(lv_sid) = sy-sysid && sy-mandt.
+          CONDENSE lv_sid.
+          LOOP AT lt_params ASSIGNING FIELD-SYMBOL(<fs_param>) WHERE param_value CP '$*$'.
+            CASE <fs_param>-param_name.
+              WHEN 'plant'.
+                <fs_param>-param_value = iv_plant.
+              WHEN 'material'.
+                <fs_param>-param_value  = is_data-material.
+              WHEN 'pack_mat'.
+                <fs_param>-param_value = is_data-pack_mat.
+              WHEN 'hu_no'.
+                <fs_param>-param_value = is_data-hu_no.
+              WHEN 'deviceID'.
+                 <fs_param>-param_value = lv_printername.
+              WHEN 'SID'.
+                <fs_param>-param_value = lv_sid.
+              WHEN 'exidv2'.
+                <fs_param>-param_value = is_data-exidv2.
+              WHEN 'output_type'.
+                <fs_param>-param_value = is_data-output_type.
+              WHEN OTHERS.
+            ENDCASE.
+          ENDLOOP.
+          TRY.
+              lr_framework->update_api_data_for_call( it_body = lt_body it_params = lt_params ).
+              lr_framework->call_api(
+                IMPORTING
+                  ev_reason           = DATA(lv_reason)
+                  ev_code             = DATA(lv_code)
+                  et_response_headers = DATA(lt_header)
+                  ev_response_body    = DATA(lv_response_body)
+                  ev_spool  = DATA(lv_spool)
+              ).
+            CATCH /rb4r/lo_cx_rest_frmwrk INTO DATA(lr_exception).
+              DATA(lv_exception) = lr_exception->get_longtext( ).
+          ENDTRY.
+
+        CATCH   /rb4r/lo_cx_rest_frmwrk INTO lr_exception.
+          lv_exception = lr_exception->get_longtext( ).
+      ENDTRY.
+
+      IF sy-subrc NE 0.
+        RETURN.
+      ELSE.
+        IF lv_code = '200'. "ok
+          ev_spool = COND #( WHEN lv_spool IS NOT INITIAL THEN lv_spool ELSE '').
+          es_msg = COND #( WHEN lv_code IS NOT INITIAL THEN lv_code ELSE '').
+          es_response =  COND #(  WHEN lv_response_body IS NOT INITIAL THEN lv_response_body ELSE '' ).
+        ELSE.
+          es_response = |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+          ev_spool =   |;HU_NU={ is_data-hu_no ALPHA = OUT } |.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method /RB1M/CL_SD_RFID_DATA->/RB1M/IF_SD_RFID_DATA~CALL_REST_API_RESPONSE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_INTERNAL_REQ_DATA           TYPE        /RB1M/SD_INT_REQ(optional)
+* | [--->] IS_EXTERNAL_REQ_DATA           TYPE        /RB1M/SD_EXT_REQ(optional)
+* | [--->] IV_PLANT                       TYPE        HUM_WERKS
+* | [--->] IV_VSTEL                       TYPE        VSTEL(optional)
+* | [<---] ES_RESPONSE                    TYPE        STRING
+* | [<---] ES_MSG                         TYPE        STRING
+* | [<---] EV_SPOOL                       TYPE        RSPOTITLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD /rb1m/if_sd_rfid_data~call_rest_api_response.
+    IF iv_vstel IS INITIAL." call internal API
+      CALL METHOD me->/rb1m/if_sd_rfid_data~call_api_internal_response
+        EXPORTING
+          is_data     = is_internal_req_data
+          iv_plant    = iv_plant
+        IMPORTING
+          es_response = DATA(lv_response)
+          es_msg      = DATA(lv_msg)
+          ev_spool    = DATA(lv_spool).
+    ELSE." call External API
+      CALL METHOD me->/rb1m/if_sd_rfid_data~call_api_external_response
+        EXPORTING
+          is_data     = is_external_req_data
+          iv_plant    = iv_plant
+        IMPORTING
+          es_response = lv_response
+          es_msg      = lv_msg
+          ev_spool    = lv_spool.
+    ENDIF.
+
+    es_response = lv_response.
+    es_msg      = lv_msg.
+    ev_spool    = lv_spool.
+
+  ENDMETHOD.
+ENDCLASS.
