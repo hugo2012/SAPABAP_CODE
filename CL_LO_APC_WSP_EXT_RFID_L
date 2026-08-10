@@ -1,0 +1,115 @@
+class /RB4R/CL_LO_APC_WSP_EXT_RFID_L definition
+  public
+  inheriting from CL_APC_WSP_EXT_STATELESS_PCP_B
+  final
+  create public .
+
+public section.
+
+  constants MC_APPLICATION_ID type AMC_APPLICATION_ID value '/RB4R/LO_RFID_LOAD_MONITOR_AMC' ##NO_TEXT.
+  constants MC_AMC_CHANNEL_ID type AMC_CHANNEL_ID value '/rfid_monitor' ##NO_TEXT.
+
+  methods SEND_MESSAGE
+    importing
+      value(IV_AMC_APPLICATION_ID) type AMC_APPLICATION_ID
+      value(IV_AMC_CHANNEL_ID) type AMC_CHANNEL_ID
+      value(IV_MESSAGE) type STRING
+    exporting
+      !ES_MESSAGE type BAPIRET2 .
+
+  methods IF_APC_WSP_EXT_PCP~ON_MESSAGE
+    redefinition .
+  methods IF_APC_WSP_EXT_PCP~ON_START
+    redefinition .
+protected section.
+private section.
+
+  methods SEND_ERROR
+    importing
+      !I_MESSAGE_MANAGER type ref to IF_APC_WSP_MESSAGE_MANAGER_PCP
+      !I_TEXT type STRING .
+ENDCLASS.
+
+
+
+CLASS /RB4R/CL_LO_APC_WSP_EXT_RFID_L IMPLEMENTATION.
+
+
+  method IF_APC_WSP_EXT_PCP~ON_MESSAGE.
+
+  endmethod.
+
+
+  method IF_APC_WSP_EXT_PCP~ON_START.
+
+   TRY.
+      " bind the default AMC channel to APC WebSocket connection
+      DATA(lo_binding) = i_context->get_binding_manager( ).
+
+      lo_binding->bind_amc_message_consumer(   i_application_id = mc_application_id
+                                               i_channel_id     = mc_amc_channel_id
+                                               ).
+   CATCH cx_apc_error INTO DATA(lx_apc_error).
+      DATA(lv_message) = lx_apc_error->get_text( ).
+      send_error( i_message_manager = i_message_manager i_text = lv_message ).
+      RETURN.
+
+    CATCH cx_ac_message_type_pcp_error INTO DATA(lx_pcp_error).
+      lv_message = lx_pcp_error->get_text( ).
+      send_error( i_message_manager = i_message_manager i_text = lv_message ).
+      RETURN.
+  ENDTRY.
+  endmethod.
+
+
+  method SEND_ERROR.
+    TRY.
+        DATA(lo_message) = i_message_manager->create_message( ).
+        lo_message->set_field( i_name = 'command' i_value = 'error' ).
+        lo_message->set_text( i_text ).
+        i_message_manager->send( lo_message ).
+      CATCH cx_apc_error INTO DATA(lx_apc_error).
+        data(lv_message) = lx_apc_error->get_text( ) ##NEEDED.
+        "bad luck
+      CATCH cx_ac_message_type_pcp_error INTO DATA(lx_ac_error).
+         lv_message = lx_ac_error->get_text( ).
+        "bad luck
+    ENDTRY.
+  endmethod.
+
+
+  method SEND_MESSAGE.
+    DATA:
+    lr_producer TYPE REF TO if_amc_message_producer_pcp,
+    lr_message  TYPE REF TO if_ac_message_type_pcp.
+
+  TRY.
+      lr_producer ?= cl_amc_channel_manager=>create_message_producer(
+          i_application_id = iv_amc_application_id
+          i_channel_id = iv_amc_channel_id
+      ).
+*     Create message
+      lr_message = cl_ac_message_type_pcp=>create( ).
+*     Set message
+      lr_message->set_text( i_message = iv_message ).
+*     send message
+      lr_producer->send( i_message = lr_message ).
+    CATCH cx_ac_message_type_pcp_error INTO DATA(lx_ac_message_type_pcp_error).
+      IF lx_ac_message_type_pcp_error IS NOT INITIAL .
+        es_message-id = '00'.
+        es_message-type = 'E'.
+        es_message-number = '001'.
+        es_message-message_v1 = lx_ac_message_type_pcp_error->get_text( ).
+        MESSAGE ID es_message-id TYPE es_message-type NUMBER es_message-number INTO es_message-message WITH es_message-message_v1.
+      ENDIF.
+    CATCH cx_amc_error INTO DATA(lx_amc_error).
+      IF lx_amc_error IS NOT INITIAL .
+        es_message-id = '00'.
+        es_message-type = 'E'.
+        es_message-number = '001'.
+        es_message-message_v1 = lx_amc_error->get_text( ).
+        MESSAGE ID es_message-id TYPE es_message-type NUMBER es_message-number INTO es_message-message WITH es_message-message_v1.
+      ENDIF.
+  ENDTRY.
+  endmethod.
+ENDCLASS.
